@@ -4,20 +4,20 @@ For the current command-by-command and SDK-method mapping, see the **[SDK + CLI 
 
 Captured from the real website on 2026-09-25. The SDK is implemented by hand; no inferred OpenAPI or external reverse-engineering tool is used.
 
-| Operation | Observed request | Response / behavior |
-|---|---|---|
-| Sign-in bootstrap | `POST /apiproxy/v1/account/a0/signin?returnUrl=...` | Redirect information for the hosted login |
-| Consumer sign-in | Form POST on `https://auth.starbucks.com/u/login` | Hosted form followed by `/authorize/resume` and `/apiproxy/v1/oauth-callback`; SDK transaction and limitations are documented in the reference |
-| Stores | `GET /apiproxy/v1/locations?place=Seattle&lat=47.6061389&lng=-122.3328481` | Array of `{distance, store}` records; store has both an ID and full `storeNumber` |
-| Menu | `GET /apiproxy/v1/ordering/menu` | `{menus: [...]}` with recursive categories |
-| Store menu | Same endpoint, with `storeNumber=114`, `ownershipTypeCode=CO`, `timeZone=GMT-07:00 America/Los_Angeles` | Availability at the selected store |
-| Product | `GET /apiproxy/v1/ordering/407/hot` | `{products: [...]}` with size SKUs, default recipes, nested modifier categories |
-| Pickup estimate | `GET /apiproxy/v1/ordering/pre-order-pickup-estimate/114` | Current pickup estimate; observed but not exposed as a dedicated SDK method |
-| Consumer account | `POST /apiproxy/v1/orchestra/get-user` with `{variables:{}}` | `data.user`, including consumer `exId`; presence is checked for authenticated status |
-| Starbucks Cards | `POST /apiproxy/v1/orchestra/get-stored-value-card-list` with `{variables:{}}` | `data.user.storedValueCardList` |
-| Wallet | `POST /apiproxy/v1/orchestra/get-starpay-wallet` | `data.starPayWallet`; tested with `starPayWalletInput.riskInput` containing platform `Web`, market `US`, and ccAgentName `WebApp`, without a deviceFingerprint |
-| Member pricing | `POST /apiproxy/v1/orchestra/price-order` | `data.priceOrder`, with line items, tax, total, currency and expiration |
-| Guest pricing | `POST /apiproxy/v1/orchestra/price-order-guest` | Same pricing envelope; tested in the initial guest browser session |
+| Operation         | Observed request                                                                                        | Response / behavior                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sign-in bootstrap | `POST /apiproxy/v1/account/a0/signin?returnUrl=...`                                                     | Redirect information for the hosted login                                                                                                                      |
+| Consumer sign-in  | Form POST on `https://auth.starbucks.com/u/login`                                                       | Hosted form followed by `/authorize/resume` and `/apiproxy/v1/oauth-callback`; SDK transaction and limitations are documented in the reference                 |
+| Stores            | `GET /apiproxy/v1/locations?place=Seattle&lat=47.6061389&lng=-122.3328481`                              | Array of `{distance, store}` records; store has both an ID and full `storeNumber`                                                                              |
+| Menu              | `GET /apiproxy/v1/ordering/menu`                                                                        | `{menus: [...]}` with recursive categories                                                                                                                     |
+| Store menu        | Same endpoint, with `storeNumber=114`, `ownershipTypeCode=CO`, `timeZone=GMT-07:00 America/Los_Angeles` | Availability at the selected store                                                                                                                             |
+| Product           | `GET /apiproxy/v1/ordering/407/hot`                                                                     | `{products: [...]}` with size SKUs, default recipes, nested modifier categories                                                                                |
+| Pickup estimate   | `GET /apiproxy/v1/ordering/pre-order-pickup-estimate/114`                                               | Current pickup estimate; observed but not exposed as a dedicated SDK method                                                                                    |
+| Consumer account  | `POST /apiproxy/v1/orchestra/get-user` with `{variables:{}}`                                            | `data.user`, including consumer `exId`; presence is checked for authenticated status                                                                           |
+| Starbucks Cards   | `POST /apiproxy/v1/orchestra/get-stored-value-card-list` with `{variables:{}}`                          | `data.user.storedValueCardList`                                                                                                                                |
+| Wallet            | `POST /apiproxy/v1/orchestra/get-starpay-wallet`                                                        | `data.starPayWallet`; tested with `starPayWalletInput.riskInput` containing platform `Web`, market `US`, and ccAgentName `WebApp`, without a deviceFingerprint |
+| Member pricing    | `POST /apiproxy/v1/orchestra/price-order`                                                               | `data.priceOrder`, with line items, tax, total, currency and expiration                                                                                        |
+| Guest pricing     | `POST /apiproxy/v1/orchestra/price-order-guest`                                                         | Same pricing envelope; tested in the initial guest browser session                                                                                             |
 
 Starbucks orchestrator endpoints accept an operation-specific `{variables: ...}` envelope. They are not a general public GraphQL endpoint in this implementation. The SDK never sends arbitrary queries or mutations.
 
@@ -28,15 +28,17 @@ The browser's pricing request for the test drink was:
   "variables": {
     "order": {
       "cart": {
-        "items": [{
-          "quantity": 1,
-          "commerce": {"sku": "42"},
-          "childItems": [
-            {"quantity": 3, "commerce": {"sku": "55"}},
-            {"quantity": 1, "commerce": {"sku": "11112911"}}
-          ],
-          "key": "407/hot:Grande::82(3)(a)::2122556(1)(a)-0"
-        }],
+        "items": [
+          {
+            "quantity": 1,
+            "commerce": { "sku": "42" },
+            "childItems": [
+              { "quantity": 3, "commerce": { "sku": "55" } },
+              { "quantity": 1, "commerce": { "sku": "11112911" } }
+            ],
+            "key": "407/hot:Grande::82(3)(a)::2122556(1)(a)-0"
+          }
+        ],
         "offers": []
       },
       "fulfillment": {

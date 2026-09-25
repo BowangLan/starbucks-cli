@@ -24,6 +24,18 @@ bun run starbucks product 407 --form hot --options
 bun run starbucks stores --place Seattle --lat 47.6061389 --lng=-122.3328481
 ```
 
+Development checks use [Oxlint](https://oxc.rs/docs/guide/usage/linter.html) and [Oxfmt](https://oxc.rs/docs/guide/usage/formatter.html):
+
+```sh
+bun run lint          # check source and tests
+bun run lint:fix      # apply safe lint fixes
+bun run format       # format code, configuration, and documentation
+bun run format:check # check formatting without writing
+bun run check        # lint, formatting, build, and tests
+```
+
+Generated output and private local state are excluded. Captured JSON fixtures are excluded from formatting.
+
 Build a local cart. Starbucks' observed web flow maintains cart state locally and sends the cart to the pricing endpoint; no server cart-create/add endpoint was observed.
 
 ```sh
@@ -62,14 +74,25 @@ bun run starbucks cart quote --file .starbucks/draft-cart.json
 SDK example:
 
 ```ts
-import { CookieJar } from 'tough-cookie';
-import { StarbucksClient, HttpTransport, createCart, createItem, addItem } from './dist/index.js';
+import { CookieJar } from "tough-cookie";
+import {
+  StarbucksClient,
+  HttpTransport,
+  createCart,
+  createItem,
+  addItem,
+} from "./dist/index.js";
 
 const publicApi = new StarbucksClient();
-const product = await publicApi.product(407, 'hot');
-const cart = addItem(createCart('114-101752'), createItem(product, {
-  size: 'Grande', milk: 'Oatmilk', shots: 3,
-}));
+const product = await publicApi.product(407, "hot");
+const cart = addItem(
+  createCart("114-101752"),
+  createItem(product, {
+    size: "Grande",
+    milk: "Oatmilk",
+    shots: 3,
+  }),
+);
 
 // Supply a previously obtained serialized HTTP jar; this is not a login flow.
 const jar = await CookieJar.deserialize(serializedCookieJar);
@@ -83,10 +106,12 @@ console.log(quote.summary.priceLabel);
 The manual-login helper is a separate SDK entry point, loaded only when requested:
 
 ```ts
-import { loginWithBrowser } from 'starbucks-web-sdk/login';
-import { StarbucksClient, HttpTransport } from 'starbucks-web-sdk';
+import { loginWithBrowser } from "starbucks-web-sdk/login";
+import { StarbucksClient, HttpTransport } from "starbucks-web-sdk";
 
-const cookieJar = await loginWithBrowser({ sessionFile: '.starbucks/http-session.json' });
+const cookieJar = await loginWithBrowser({
+  sessionFile: ".starbucks/http-session.json",
+});
 const client = new StarbucksClient(new HttpTransport({ cookieJar }));
 ```
 
