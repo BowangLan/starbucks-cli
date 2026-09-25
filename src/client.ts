@@ -8,6 +8,7 @@ import type {
   Store,
   Cart,
   PriceQuote,
+  PickupEstimate,
 } from "./types.js";
 import { toOrder } from "./cart.js";
 import { allowedRequest, ORIGIN } from "./safety.js";
@@ -163,6 +164,28 @@ export class StarbucksClient {
     if (!Array.isArray(data))
       throw new StarbucksError("Invalid locations response");
     return data;
+  }
+  async pickupEstimate(storeNumber: string): Promise<PickupEstimate> {
+    if (!/^\d+-\d+$/.test(storeNumber))
+      throw new Error("Use a full store number, e.g. 114-101752");
+    const result = (await this.transport.request(
+      "/apiproxy/v1/ordering/pre-order-pickup-estimate/" +
+        storeNumber.split("-")[0],
+    )) as PickupEstimate;
+    if (
+      !result ||
+      typeof result.locationId !== "string" ||
+      ![
+        result.preOrderEstimateMin,
+        result.preOrderEstimateMax,
+        result.preOrderEstimate,
+      ].every(
+        (value) =>
+          typeof value === "number" && Number.isFinite(value) && value >= 0,
+      )
+    )
+      throw new StarbucksError("Invalid pickup estimate response");
+    return result;
   }
   async operation(
     name: string,

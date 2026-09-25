@@ -93,6 +93,7 @@ export interface Cart {
   version: 1;
   storeNumber: string;
   items: CartItem[];
+  selectedStore?: Store;
 }
 export interface OrderInput {
   cart: {
@@ -126,4 +127,25 @@ export interface PriceQuote {
 }
 export interface Transport {
   request(path: string, body?: unknown): Promise<unknown>;
+}
+
+/** Raw estimate values as returned by Starbucks; no inferred unit conversion. */
+export interface PickupEstimate {
+  locationId: string;
+  preOrderEstimateMin: number;
+  preOrderEstimateMax: number;
+  preOrderEstimate: number;
+}
+export interface PreflightCheck {
+  step: "account" | "store" | "availability" | "pickup" | "quote" | "wallet";
+  status: "passed" | "failed" | "skipped";
+  detail?: unknown;
+  error?: string;
+  httpStatus?: number;
+}
+export interface PreflightReport {
+  checks: PreflightCheck[];
+  checksPassed: boolean;
+  orderSubmitted: false;
+  note: string;
 }

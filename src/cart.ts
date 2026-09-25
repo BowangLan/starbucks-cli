@@ -164,3 +164,20 @@ export function decreaseItem(cart: Cart, index: number): Cart {
   if (--next.items[index].quantity === 0) next.items.splice(index, 1);
   return next;
 }
+
+export function setItemQuantity(
+  cart: Cart,
+  index: number,
+  quantity: number,
+): Cart {
+  if (!Number.isInteger(index) || index < 0 || index >= cart.items.length)
+    throw new Error("Invalid cart item index");
+  if (!Number.isInteger(quantity) || quantity < 0 || quantity > 20)
+    throw new Error("Quantity must be an integer from 0 to 20");
+  const next = structuredClone(cart);
+  if (quantity === 0) next.items.splice(index, 1);
+  else next.items[index].quantity = quantity;
+  if (next.items.length)
+    toOrder({ ...next, storeNumber: next.storeNumber || "0-0" });
+  return next;
+}

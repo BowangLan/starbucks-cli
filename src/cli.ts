@@ -11,7 +11,9 @@ import {
   createCart,
   addItem,
   decreaseItem,
+  setItemQuantity,
 } from "./cart.js";
+import { preflight, summarizeWallet } from "./preflight.js";
 import type { Cart, OptionCategory } from "./types.js";
 const program = new Command()
   .name("starbucks")
@@ -89,9 +91,19 @@ program
 program
   .command("menu")
   .option("--search <term>")
-  .action(async (o) =>
-    print(o.search ? await api.searchMenu(o.search) : await api.menu()),
-  );
+  .option("--selected-store", "use the pickup café saved by the store command")
+  .action(async (o) => {
+    const current = o.selectedStore ? await readCart() : undefined;
+    const store = current?.selectedStore;
+    if (
+      o.selectedStore &&
+      (!store || store.storeNumber !== current?.storeNumber)
+    )
+      throw new Error("Select a pickup café with the store command first");
+    print(
+      o.search ? await api.searchMenu(o.search, store) : await api.menu(store),
+    );
+  });
 program
   .command("product")
   .argument("<id>")
@@ -199,20 +211,7 @@ program.command("cards").action(() =>
 program.command("wallet").action(() =>
   session(async (s) => {
     const w = await s.wallet();
-    const instruments = w.paymentInstruments;
-    print({
-      paymentInstruments: Array.isArray(instruments)
-        ? instruments.map((p) => ({
-            paymentType: p.paymentType,
-            lastFour: p.accountNumberLastFour,
-            default: p.default,
-            status: p.instrumentStatusCode,
-          }))
-        : [],
-      storedValueCardCount: Array.isArray(w.storedValueCards)
-        ? w.storedValueCards.length
-        : 0,
-    });
+    print(summarizeWallet(w));
   }),
 );
 program
@@ -235,6 +234,7 @@ program
       throw new Error("Store is not ready for mobile ordering");
     const cart = await readCart();
     cart.storeNumber = location.store.storeNumber;
+    cart.selectedStore = location.store;
     await saveCart(cart);
     print({ selected: location.store.name, storeNumber: cart.storeNumber });
   });
@@ -244,7 +244,7 @@ cart
   .command("add")
   .requiredOption("--product <id>")
   .option("--form <form>", "product form", "hot")
-  .option("--size <size>", "size", "Grande")
+  .option("--size <size>", "size (defaults to the product default)")
   .option("--milk <milk>")
   .option("--shots <count>")
   .option("--quantity <count>", "quantity", "1")
@@ -271,11 +271,53 @@ cart
     print(result);
   });
 cart
+  .command("quantity")
+  .argument("<index>")
+  .argument("<count>")
+  .description("Set item quantity (0 removes it)")
+  .action(async (index, count) => {
+    const result = setItemQuantity(
+      await readCart(),
+      Number(index),
+      Number(count),
+    );
+    await saveCart(result);
+    print(result);
+  });
+cart
+  .command("remove")
+  .argument("<index>")
+  .action(async (index) => {
+    const result = setItemQuantity(await readCart(), Number(index), 0);
+    await saveCart(result);
+    print(result);
+  });
+cart
+  .command("clear")
+  .description("Remove all items, keeping the selected café")
+  .action(async () => {
+    const result = { ...(await readCart()), items: [] };
+    await saveCart(result);
+    print(result);
+  });
+cart
+  .command("request")
+  .description("Preview the pricing request without sending it")
+  .action(async () => {
+    print({ variables: { order: toOrder(await readCart()) } });
+  });
+cart
+  .command("pickup")
+  .description("Read the current pickup estimate for the selected café")
+  .action(async () => {
+    print(await api.pickupEstimate((await readCart()).storeNumber));
+  });
+cart
   .command("build")
   .requiredOption("--product <id>")
   .requiredOption("--store <number>", "full store number, such as 114-101752")
   .option("--form <form>", "product form", "hot")
-  .option("--size <size>", "size", "Grande")
+  .option("--size <size>", "size (defaults to the product default)")
   .option("--milk <milk>")
   .option("--shots <count>")
   .option("--quantity <count>", "quantity", "1")
@@ -314,20 +356,14 @@ cart
   );
 cart
   .command("preflight")
-  .description("Fetch account status, member quote, and wallet; never submit")
+  .description(
+    "Check account, store, availability, pickup, price, and wallet; never submit",
+  )
   .action(() =>
     session(async (s) => {
-      const input = await readCart();
-      await s.user();
-      const quote = await s.quote(input);
-      const wallet = await s.wallet();
-      print({
-        authenticated: true,
-        quote,
-        walletLoaded: !!wallet,
-        orderSubmitted: false,
-        note: "API preflight only; does not verify final checkout acceptance.",
-      });
+      const report = await preflight(s, await readCart());
+      print(report);
+      if (!report.checksPassed) process.exitCode = 1;
     }),
   );
 program
