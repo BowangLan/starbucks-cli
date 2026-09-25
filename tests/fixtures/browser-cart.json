@@ -1,0 +1,59 @@
+{
+  "data": {
+    "cart": {
+      "current": {
+        "407/hot:Grande::82(3)(a)::2122556(1)(a)": {
+          "product": {
+            "productNumber": 407,
+            "name": "Caff\u00e8 Latte",
+            "formCode": "Hot"
+          },
+          "size": {
+            "sku": "42"
+          },
+          "sizeCode": "Grande",
+          "quantity": 1,
+          "selectedOptions": [
+            {
+              "categoryKeypath": [
+                246,
+                485
+              ],
+              "optionProductNumber": 82,
+              "formCode": "qty",
+              "size": {
+                "sizeCode": "add",
+                "name": "Shots",
+                "sku": "55"
+              },
+              "topLevelCategoryNumber": 246,
+              "value": 3
+            },
+            {
+              "categoryKeypath": [
+                239,
+                484
+              ],
+              "optionProductNumber": 2122556,
+              "formCode": "one",
+              "size": {
+                "sizeCode": "add",
+                "name": "Oatmilk",
+                "sku": "11112911"
+              },
+              "topLevelCategoryNumber": 239,
+              "exclusiveCategoryNum": 484
+            }
+          ]
+        }
+      }
+    },
+    "selectedStore": {
+      "location": {
+        "store": {
+          "storeNumber": "114-101752"
+        }
+      }
+    }
+  }
+}
