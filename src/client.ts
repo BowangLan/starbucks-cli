@@ -11,19 +11,60 @@ import type {
   PickupEstimate,
   TransactionHistory,
   HistoryOptions,
+  OrderRisk,
+  OrderPickupTime,
+  OrderStatus,
+  SubmitOrderRequest,
+  SubmittedOrder,
 } from "./types.js";
 import { toOrder } from "./cart.js";
-import { allowedRequest, ORIGIN } from "./safety.js";
+import { allowedRequest, ORIGIN, SUBMIT_ORDER_PATH } from "./safety.js";
+import {
+  protectedRequestHeaders,
+  validateRequestContext,
+} from "./request-context.js";
+import type { OrderRequestContext } from "./request-context.js";
+import {
+  validateSubmissionRequest,
+  validateOrderReference,
+} from "./order-validation.js";
 export class StarbucksError extends Error {
   constructor(
     message: string,
     readonly status?: number,
+    readonly code?: string,
   ) {
     super(message);
     this.name = "StarbucksError";
   }
 }
+export class OrderSubmissionDisabledError extends StarbucksError {
+  constructor() {
+    super(
+      "Order submission is disabled in this transport. No order was placed.",
+    );
+    this.name = "OrderSubmissionDisabledError";
+  }
+}
 export function parseResponse(status: number, body: string): unknown {
+  if (status === 403) {
+    let failure;
+    try {
+      failure = JSON.parse(body);
+    } catch {
+      /* Preserve ordinary HTTP errors for non-JSON responses. */
+    }
+    if (
+      failure?.type === "authorize-operation" &&
+      failure.roleProvided === "user:limited" &&
+      failure.roleRequired === "user"
+    )
+      throw new StarbucksError(
+        "Full sign-in required for checkout (current role: user:limited). Sign in again; profile access alone does not verify checkout access.",
+        status,
+        "REAUTHENTICATION_REQUIRED",
+      );
+  }
   if (status < 200 || status >= 300)
     throw new StarbucksError(
       `Starbucks returned HTTP ${status}${status === 429 ? "; stop and try again later" : ""}`,
@@ -49,40 +90,64 @@ export interface HttpTransportOptions {
   cookieJar?: CookieJar;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
+  /** Captured vendor proof, scoped to each protected operation. May expire server-side. */
+  requestContext?: OrderRequestContext;
+  /** Off by default. Only the exact member submit-order route is enabled. */
+  allowOrderSubmission?: boolean;
 }
 /** All network I/O uses standard fetch; cookies follow RFC domain/path/expiry rules. */
 export class HttpTransport implements Transport {
   readonly cookieJar: CookieJar;
   private readonly fetcher: typeof globalThis.fetch;
+  private readonly requestContext?: OrderRequestContext;
   constructor(private readonly options: HttpTransportOptions = {}) {
+    if (options.requestContext) {
+      validateRequestContext(options.requestContext);
+      this.requestContext = structuredClone(options.requestContext);
+    }
     this.cookieJar = options.cookieJar ?? new CookieJar();
     this.fetcher = options.fetch ?? globalThis.fetch;
   }
   async request(path: string, body?: unknown): Promise<unknown> {
     const method = body === undefined ? "GET" : "POST";
-    if (!allowedRequest(path, method))
+    if (
+      path === SUBMIT_ORDER_PATH &&
+      this.options.allowOrderSubmission !== true
+    )
+      throw new OrderSubmissionDisabledError();
+    if (
+      !allowedRequest(path, method, this.options.allowOrderSubmission === true)
+    )
       throw new Error(
         "Endpoint is not permitted; order submission is disabled",
       );
     const url = new URL(path, ORIGIN);
     const cookie = await this.cookieJar.getCookieString(url.href);
+    const protection = protectedRequestHeaders(
+      this.requestContext,
+      url.pathname,
+    );
+    const headers = {
+      ...protection,
+      accept: "application/json",
+      "x-requested-with": "XMLHttpRequest",
+      ...(cookie ? { cookie } : {}),
+      ...(body === undefined
+        ? {}
+        : {
+            "content-type": "application/json",
+            origin: ORIGIN,
+            referer: ORIGIN + "/menu/cart",
+          }),
+    };
     const response = await this.fetcher(url, {
       method,
       signal: AbortSignal.timeout(this.options.timeoutMs ?? 25000),
       // Never forward account credentials to a redirect target.
       redirect: "error",
-      headers: {
-        accept: "application/json",
-        "x-requested-with": "XMLHttpRequest",
-        ...(cookie ? { cookie } : {}),
-        ...(body === undefined
-          ? {}
-          : {
-              "content-type": "application/json",
-              origin: ORIGIN,
-              referer: ORIGIN + "/menu/cart",
-            }),
-      },
+      // Native Node fetch with this Headers serialization was verified live.
+      // Passing a plain object with protection fields first returned an edge 429.
+      headers: Object.keys(protection).length ? new Headers(headers) : headers,
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     for (const value of response.headers.getSetCookie())
@@ -94,12 +159,14 @@ export class HttpTransport implements Transport {
         throw new StarbucksError(
           `${method} ${url.pathname}: ${error.message}`,
           error.status,
+          error.code,
         );
       throw error;
     }
   }
 }
 export class StarbucksClient {
+  private readonly attemptedOrders = new Set<string>();
   constructor(readonly transport: Transport = new HttpTransport()) {}
   async menu(store?: Store): Promise<Menu> {
     const q = store
@@ -176,7 +243,7 @@ export class StarbucksClient {
     )) as PickupEstimate;
     if (
       !result ||
-      typeof result.locationId !== "string" ||
+      result.locationId !== storeNumber.split("-")[0] ||
       ![
         result.preOrderEstimateMin,
         result.preOrderEstimateMax,
@@ -215,10 +282,15 @@ export class StarbucksClient {
       throw new StarbucksError("Consumer sign-in is required");
     return d.user as Record<string, unknown>;
   }
-  async wallet(): Promise<Record<string, unknown>> {
+  async wallet(risk?: OrderRisk): Promise<Record<string, unknown>> {
     const data = await this.operation("get-starpay-wallet", {
       starPayWalletInput: {
-        riskInput: { platform: "Web", market: "US", ccAgentName: "WebApp" },
+        riskInput: {
+          platform: "Web",
+          market: "US",
+          ccAgentName: "WebApp",
+          ...(risk ? { deviceFingerprint: risk.deviceFingerprint } : {}),
+        },
       },
     });
     if (!data.starPayWallet || typeof data.starPayWallet !== "object")
@@ -321,6 +393,116 @@ export class StarbucksClient {
   async cards(): Promise<unknown> {
     const d = await this.operation("get-stored-value-card-list");
     return (d.user as Record<string, unknown> | undefined)?.storedValueCardList;
+  }
+  async rewardPrograms(): Promise<Record<string, unknown>[]> {
+    const data = await this.operation("reward-programs");
+    if (!Array.isArray(data.rewardPrograms))
+      throw new StarbucksError("Reward programs unavailable");
+    return data.rewardPrograms;
+  }
+
+  async previousOrders(
+    storeNumber: string,
+    limit = 40,
+  ): Promise<Record<string, unknown>[]> {
+    if (
+      !/^\d+-\d+$/.test(storeNumber) ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 40
+    )
+      throw new Error("Use a full store number and a limit from 1 to 40");
+    const data = await this.operation("get-previous-orders", {
+      locale: "en-US",
+      storeNumber: storeNumber.split("-")[0],
+      limit,
+    });
+    if (!Array.isArray(data.previousOrders))
+      throw new StarbucksError("Previous orders unavailable");
+    return data.previousOrders;
+  }
+
+  async orderPickupTime(
+    orderId: string,
+    storeNumber: string,
+  ): Promise<OrderPickupTime> {
+    validateOrderReference(orderId, storeNumber);
+    const data = (await this.transport.request(
+      `/apiproxy/v1/ordering/pickup-time/${orderId}/${storeNumber.split("-")[0]}`,
+    )) as OrderPickupTime;
+    if (
+      !data ||
+      data.orderId !== orderId ||
+      data.locationId !== storeNumber.split("-")[0] ||
+      typeof data.pickupTime !== "string" ||
+      !Number.isFinite(Date.parse(data.pickupTime)) ||
+      ![
+        data.waitTimeEstimate,
+        data.waitTimeEstimateMin,
+        data.waitTimeEstimateMax,
+      ].every(
+        (value) =>
+          typeof value === "number" && Number.isFinite(value) && value >= 0,
+      )
+    )
+      throw new StarbucksError(
+        "Order pickup estimate unavailable or mismatched",
+      );
+    return data;
+  }
+
+  async orderStatus(
+    orderId: string,
+    storeNumber: string,
+  ): Promise<OrderStatus> {
+    return {
+      orderId,
+      storeNumber,
+      status: "pickup-estimate-available",
+      pickup: await this.orderPickupTime(orderId, storeNumber),
+    };
+  }
+
+  /** One attempt only. A timeout or invalid response must be reconciled, never retried. */
+  async submitOrder(
+    request: SubmitOrderRequest,
+    options: { confirm: boolean },
+  ): Promise<SubmittedOrder> {
+    if (options?.confirm !== true)
+      throw new Error("Order submission requires explicit confirmation");
+    validateSubmissionRequest(request);
+    const { orderId, storeNumber } = request.variables.subInp;
+    if (this.attemptedOrders.has(orderId))
+      throw new Error("Order submission already attempted; check order status");
+    this.attemptedOrders.add(orderId);
+    try {
+      const response = (await this.transport.request(
+        SUBMIT_ORDER_PATH,
+        request,
+      )) as {
+        data?: { submitOrder?: { __typename?: string } };
+        errors?: unknown[];
+      };
+      if (
+        response?.errors?.length ||
+        response?.data?.submitOrder?.__typename !== "ServiceTime"
+      )
+        throw new Error("Submission was not acknowledged");
+      return {
+        state: "submitted",
+        orderId,
+        storeNumber,
+        serviceTime: { __typename: "ServiceTime" },
+      };
+    } catch (error) {
+      if (error instanceof OrderSubmissionDisabledError) {
+        this.attemptedOrders.delete(orderId);
+        throw error;
+      }
+      throw new StarbucksError(
+        "Submission was not confirmed. Do not resubmit; check order status and history using the prepared order ID.",
+      );
+    }
   }
   async quote(
     cart: Cart,

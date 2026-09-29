@@ -116,3 +116,75 @@ test("browser runtime is isolated to explicit login entry point", async () => {
   const files = await fs.readdir(new URL("../dist/", import.meta.url));
   assert.ok(!files.some((f) => /^(browser|service)\./.test(f)));
 });
+
+test("limited member authorization is surfaced as a sign-in requirement instead of generic 403", async () => {
+  const client = new StarbucksClient(
+    new HttpTransport({
+      fetch: async () =>
+        Response.json(
+          {
+            roleProvided: "user:limited",
+            roleRequired: "user",
+            type: "authorize-operation",
+          },
+          { status: 403 },
+        ),
+    }),
+  );
+  await assert.rejects(client.wallet(), (error) => {
+    assert.equal(error.status, 403);
+    assert.equal(error.code, "REAUTHENTICATION_REQUIRED");
+    assert.match(error.message, /Full sign-in required/);
+    assert.match(error.message, /Sign in again/);
+    return true;
+  });
+});
+
+test("captured protection headers reach only their exact operation, with live session cookies retained", async () => {
+  const headers = Object.fromEntries(
+    ["a", "a0", "b", "c", "d", "f", "z"].map((suffix) => [
+      "x-dq7hy5l1-" + suffix,
+      "fixture-" + suffix,
+    ]),
+  );
+  const jar = new CookieJar();
+  await jar.setCookie(
+    "session=fresh; Secure; Path=/",
+    "https://www.starbucks.com/",
+  );
+  const calls = [];
+  const transport = new HttpTransport({
+    cookieJar: jar,
+    requestContext: {
+      version: 1,
+      operations: {
+        "price-order": { capturedAt: "2026-09-29T02:10:00Z", headers },
+      },
+    },
+    fetch: async (url, init) => {
+      const supplied = new Headers(init.headers);
+      const pricing = new URL(url).pathname.endsWith("/price-order");
+      if (pricing)
+        assert.ok(
+          init.headers instanceof Headers,
+          "Protected requests use the verified Headers serialization",
+        );
+      calls.push(String(url));
+      assert.equal(supplied.get("cookie"), "session=fresh");
+      for (const [key, value] of Object.entries(headers))
+        assert.equal(supplied.get(key), pricing ? value : null);
+      return Response.json({ data: {} });
+    },
+  });
+  await transport.request("/apiproxy/v1/orchestra/price-order", {
+    variables: {},
+  });
+  await transport.request("/apiproxy/v1/orchestra/get-starpay-wallet", {
+    variables: {},
+  });
+  await assert.rejects(
+    transport.request("/apiproxy/v1/orchestra/submit-order", { variables: {} }),
+    /submission is disabled/,
+  );
+  assert.equal(calls.length, 2);
+});

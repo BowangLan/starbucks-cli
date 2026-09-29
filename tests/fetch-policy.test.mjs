@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   allowedContextRequest,
+  allowedCheckoutContextRequest,
   retryNotBefore,
 } from "../scripts/fetch-policy.mjs";
 
@@ -29,6 +30,25 @@ test("login context allowlist separates credential, registration, script, and re
     ["http://auth.starbucks.com/u/login", "POST"],
   ])
     assert.equal(allowedContextRequest(new URL(url), method), false, url);
+});
+
+test("checkout context permits protection scripts and registration but no login or order APIs", () => {
+  for (const [url, method] of [
+    ["https://www.starbucks.com/", "GET"],
+    ["https://www.starbucks.com/vendor/static/vendor2.js", "GET"],
+    ["https://prod.accdab.net/beacon/gt", "POST"],
+    ["https://mpsnare.iesnare.com/general5/wdp.js", "GET"],
+  ])
+    assert.equal(allowedCheckoutContextRequest(new URL(url), method), true);
+  for (const [url, method] of [
+    ["https://auth.starbucks.com/u/login", "POST"],
+    ["https://www.starbucks.com/apiproxy/v1/orchestra/get-user", "POST"],
+    ["https://www.starbucks.com/apiproxy/v1/orchestra/submit-order", "POST"],
+    ["https://www.starbucks.com/apiproxy/v1/orchestra/price-order", "POST"],
+    ["https://www.starbucks.com/apiproxy/v1/account/a0/signin", "POST"],
+    ["https://evil.test/vendor/static/vendor2.js", "GET"],
+  ])
+    assert.equal(allowedCheckoutContextRequest(new URL(url), method), false);
 });
 
 test("cooldown honors seconds and HTTP-date Retry-After without scheduling retries", () => {

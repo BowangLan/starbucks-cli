@@ -1,6 +1,6 @@
 # Verification status
 
-The CLI uses a visible browser for manual sign-in and standard fetch for all other operations. Order submission is disabled.
+The CLI uses a visible browser for manual sign-in and standard fetch for all other operations. Order submission is disabled by default; the explicitly enabled path is tested only with mocked fetch. No order was placed during development.
 
 ## Local checks
 
@@ -25,6 +25,18 @@ Observed on September 29, 2026 UTC:
 - The new `bun run auth:fetch` flow generated fresh context using the current page scripts and native Node fetch. Its single credential POST returned 302, OAuth completed, and authenticated `get-user` returned 200. See [fetch login verification](fetch-login.md).
 - The resulting session loaded all three transaction-history pages with HTTP 200, returning 114 unique visible entries. A purchase receipt and the empty eGift order list also returned 200. See [history contracts and verification](history.md).
 - The missing `src/preflight.ts` module has been restored. The full SDK/CLI build succeeds, and `auth status` verifies the fetch-login session. Regression tests exercise the built CLI's startup and account verification.
+
+## Order-flow verification (September 29, 2026 UTC)
+
+- The supplied capture establishes member submission (`submit-order` → `ServiceTime`), pickup lookup, and previous-orders contracts. A sanitized fixture drives the complete SDK and CLI flow offline.
+- The full dump audit covered 478 requests, including all 21 application requests across 14 endpoints. All application response bodies were present.
+- Wallet's initial 403 reported `user:limited` authorization. Fresh sign-in restored full authorization and wallet returned 200. Profile access alone is insufficient. The SDK now identifies this error as `REAUTHENTICATION_REQUIRED`.
+- Pricing initially returned an empty 429. Adding the seven captured request protection headers, scoped to pricing and serialized through `Headers`, produced a valid live quote. The production diagnostic then returned wallet 200 and pricing 200 for the captured $4.25 croissant cart.
+- The normal Bun CLI completed live preparation through a $4.97 quote for a separate available Americano cart at an open Honolulu café. The captured Palo Alto café was closed during final verification. The test preserved the user's default cart.
+- Fresh Iovation/Accertify risk context was generated, and the actual submission envelope was constructed locally with zero network requests. Device-risk generation does not generate the seven request protection headers; imported protection context has an unknown server-side lifetime.
+- No live submit-order or post-submit pickup-time request was sent. Live submission acceptance remains unverified by design.
+
+See the [order-flow guide](order-flow.md) for command usage and the [403/429 investigation](order-investigation.md) for controlled comparisons, evidence, and remaining limits.
 
 ## Reproduction
 

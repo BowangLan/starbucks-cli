@@ -1,0 +1,634 @@
+{
+  "source": "network-dump-2026-09-29T02-09-20-076Z, tab-001; account/payment/order/risk identifiers replaced",
+  "store": {
+    "id": "89201",
+    "storeNumber": "17011-170949",
+    "name": "3885 El Camino Real",
+    "ownershipTypeCode": "CO",
+    "open": true,
+    "coordinates": {
+      "latitude": 37.41737,
+      "longitude": -122.13061
+    },
+    "mobileOrdering": {
+      "availability": "READY",
+      "guestOrdering": true,
+      "stallQuantity": null
+    },
+    "pickUpOptions": [
+      {
+        "code": "16",
+        "name": "In caf\u00e9",
+        "available": true
+      },
+      {
+        "code": "DT",
+        "name": "Drive-thru",
+        "available": true
+      }
+    ],
+    "acceptsNonSvcMop": true,
+    "timeZone": {
+      "timeZoneId": "GMT-07:00 America/Los_Angeles"
+    },
+    "address": {
+      "singleLine": "3885 El Camino Real, Palo Alto"
+    }
+  },
+  "product": {
+    "products": [
+      {
+        "starCost": 100,
+        "inCatalog": true,
+        "name": "Butter Croissant",
+        "formCode": "Single",
+        "productNumber": 1033,
+        "productType": "food",
+        "description": "Classic butter croissant with soft, flaky layers and a golden-brown crust.\n\n\u2013VEGETARIAN",
+        "imageURL": "https://cloudassets.starbucks.com/is/image/sbuxcorp/SBX20210915_Croissant-onGreen",
+        "productOptions": [
+          {
+            "categoryNumber": 224,
+            "displayOrder": 100,
+            "name": "Butter & Spreads",
+            "attributes": {
+              "unitOfMeasure": null
+            },
+            "products": [
+              {
+                "productNumber": 1189,
+                "form": {
+                  "name": "Butter",
+                  "formCode": "qty",
+                  "availability": "Available",
+                  "sizes": [
+                    {
+                      "sizeCode": "add",
+                      "name": "Butter",
+                      "sku": "11016280"
+                    }
+                  ]
+                }
+              },
+              {
+                "productNumber": 1190,
+                "form": {
+                  "name": "Plain Cream Cheese",
+                  "formCode": "qty",
+                  "availability": "Available",
+                  "sizes": [
+                    {
+                      "sizeCode": "add",
+                      "name": "Plain Cream Cheese",
+                      "sku": "11187700"
+                    },
+                    {
+                      "sizeCode": "no",
+                      "name": "No Plain Cream Cheese",
+                      "sku": "11187701"
+                    }
+                  ]
+                }
+              }
+            ],
+            "children": []
+          },
+          {
+            "categoryNumber": 222,
+            "displayOrder": 0,
+            "name": "Warming",
+            "attributes": {
+              "unitOfMeasure": null
+            },
+            "products": [
+              {
+                "productNumber": 1179,
+                "form": {
+                  "name": "Warmed",
+                  "formCode": "one",
+                  "availability": "Available",
+                  "sizes": [
+                    {
+                      "sizeCode": "add",
+                      "name": "Warmed",
+                      "sku": "204198"
+                    }
+                  ]
+                }
+              },
+              {
+                "productNumber": 1193,
+                "form": {
+                  "name": "Not Warmed",
+                  "formCode": "one",
+                  "availability": "Available",
+                  "sizes": [
+                    {
+                      "sizeCode": "add",
+                      "name": "Not Warmed",
+                      "sku": "11035149"
+                    }
+                  ]
+                }
+              }
+            ],
+            "children": []
+          }
+        ],
+        "sizes": [
+          {
+            "name": "1 Serving",
+            "recipe": {
+              "default": [
+                {
+                  "productOption": {
+                    "form": {
+                      "sizes": [
+                        {
+                          "sku": "204198",
+                          "sizeCode": "add",
+                          "default": true
+                        }
+                      ]
+                    },
+                    "productNumber": 1179
+                  },
+                  "formCode": "one",
+                  "quantity": 0,
+                  "sizeCode": "add",
+                  "skuName": "Food Temperature Option"
+                }
+              ]
+            },
+            "defaultOptionValues": [],
+            "nutrition": {
+              "servingSize": {
+                "displayName": "Serving Size",
+                "displayValue": " 62 g"
+              },
+              "calories": {
+                "displayName": "Calories",
+                "displayValue": 250
+              },
+              "caloriesFromFat": {
+                "displayName": "Calories from Fat",
+                "displayValue": 130
+              },
+              "additionalFacts": [
+                {
+                  "displayName": "Total Fat",
+                  "unitOfMeasure": "g",
+                  "value": 14,
+                  "dailyPercentValue": 0.17,
+                  "saturatedFat": {
+                    "displayName": "Saturated Fat",
+                    "unitOfMeasure": "g",
+                    "value": 8,
+                    "dailyPercentValue": 0.4
+                  },
+                  "transFat": {
+                    "displayName": "Trans Fat",
+                    "unitOfMeasure": "g",
+                    "value": 0,
+                    "dailyPercentValue": null
+                  },
+                  "id": "totalFat",
+                  "displayValue": " 14 g",
+                  "dailyValue": "17%",
+                  "subfacts": [
+                    {
+                      "displayName": "Saturated Fat",
+                      "unitOfMeasure": "g",
+                      "value": 8,
+                      "dailyPercentValue": 0.4,
+                      "id": "saturatedFat",
+                      "displayValue": " 8 g",
+                      "dailyValue": "40%"
+                    },
+                    {
+                      "displayName": "Trans Fat",
+                      "unitOfMeasure": "g",
+                      "value": 0,
+                      "dailyPercentValue": null,
+                      "id": "transFat",
+                      "displayValue": " 0 g",
+                      "dailyValue": null
+                    }
+                  ]
+                },
+                {
+                  "displayName": "Cholesterol",
+                  "unitOfMeasure": "mg",
+                  "value": 45,
+                  "dailyPercentValue": 0.15,
+                  "id": "cholesterol",
+                  "displayValue": " 45 mg",
+                  "dailyValue": "15%"
+                },
+                {
+                  "displayName": "Sodium",
+                  "unitOfMeasure": "mg",
+                  "value": 300,
+                  "dailyPercentValue": 0.13,
+                  "id": "sodium",
+                  "displayValue": " 300 mg",
+                  "dailyValue": "13%"
+                },
+                {
+                  "displayName": "Total Carbohydrates",
+                  "unitOfMeasure": "g",
+                  "value": 26,
+                  "dailyPercentValue": 0.09,
+                  "dietaryFiber": {
+                    "displayName": "Dietary Fiber",
+                    "unitOfMeasure": "g",
+                    "value": 1,
+                    "dailyPercentValue": 0.03
+                  },
+                  "sugars": {
+                    "displayName": "Sugars",
+                    "unitOfMeasure": "g",
+                    "value": 4,
+                    "dailyPercentValue": null
+                  },
+                  "id": "totalCarbs",
+                  "displayValue": " 26 g",
+                  "dailyValue": "9%",
+                  "subfacts": [
+                    {
+                      "displayName": "Dietary Fiber",
+                      "unitOfMeasure": "g",
+                      "value": 1,
+                      "dailyPercentValue": 0.03,
+                      "id": "dietaryFiber",
+                      "displayValue": " 1 g",
+                      "dailyValue": "3%"
+                    },
+                    {
+                      "displayName": "Sugars",
+                      "unitOfMeasure": "g",
+                      "value": 4,
+                      "dailyPercentValue": null,
+                      "id": "sugars",
+                      "displayValue": " 4 g",
+                      "dailyValue": null
+                    }
+                  ]
+                },
+                {
+                  "displayName": "Protein",
+                  "unitOfMeasure": "g",
+                  "value": 5,
+                  "id": "protein",
+                  "displayValue": " 5 g",
+                  "dailyValue": null
+                }
+              ]
+            },
+            "sizeCode": "1 Piece",
+            "sku": "11083122",
+            "default": true,
+            "allergens": {
+              "shouldDisplay": true,
+              "text": "Egg, Milk, Wheat"
+            },
+            "ingredients": [
+              {
+                "name": "Enriched Wheat Flour",
+                "children": [
+                  {
+                    "name": "Wheat Flour",
+                    "children": []
+                  },
+                  {
+                    "name": "Niacin",
+                    "children": []
+                  },
+                  {
+                    "name": "Reduced Iron",
+                    "children": []
+                  },
+                  {
+                    "name": "Ascorbic Acid",
+                    "children": []
+                  },
+                  {
+                    "name": "Thiamine Mononitrate",
+                    "children": []
+                  },
+                  {
+                    "name": "Riboflavin",
+                    "children": []
+                  },
+                  {
+                    "name": "Folic Acid",
+                    "children": []
+                  },
+                  {
+                    "name": "Enzyme",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "Butter",
+                "children": [
+                  {
+                    "name": "Cream",
+                    "children": [
+                      {
+                        "name": "Milk",
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "name": "Natural Flavor",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "Water",
+                "children": []
+              },
+              {
+                "name": "Sugar",
+                "children": []
+              },
+              {
+                "name": "Eggs",
+                "children": []
+              },
+              {
+                "name": "Whole Milk Powder",
+                "children": []
+              },
+              {
+                "name": "Yeast",
+                "children": []
+              },
+              {
+                "name": "Sea Salt",
+                "children": []
+              },
+              {
+                "name": "Sourdough",
+                "children": [
+                  {
+                    "name": "Water",
+                    "children": []
+                  },
+                  {
+                    "name": "Fermented Wheat Flour",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "Dough Conditioner",
+                "children": [
+                  {
+                    "name": "Wheat Gluten",
+                    "children": []
+                  },
+                  {
+                    "name": "Ascorbic Acid",
+                    "children": []
+                  },
+                  {
+                    "name": "Xanthan Gum",
+                    "children": []
+                  },
+                  {
+                    "name": "Salt",
+                    "children": []
+                  },
+                  {
+                    "name": "Enzymes",
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "name": "Contains Bioengineered Food Ingredients.",
+                "children": []
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "wallet": {
+    "data": {
+      "starPayWallet": {
+        "paymentInstruments": [
+          {
+            "paymentType": "PayPal",
+            "instrumentStatusCode": "Active",
+            "starpayActions": [
+              {
+                "type": "RELOAD",
+                "dateLastUsed": null,
+                "isDefault": false,
+                "sortOrderIndex": 0
+              },
+              {
+                "type": "AUTORELOAD",
+                "dateLastUsed": null,
+                "isDefault": false,
+                "sortOrderIndex": 9
+              },
+              {
+                "type": "MOP",
+                "dateLastUsed": null,
+                "isDefault": true,
+                "sortOrderIndex": 1
+              },
+              {
+                "type": "MANAGE",
+                "dateLastUsed": null,
+                "isDefault": false,
+                "sortOrderIndex": 1
+              },
+              {
+                "type": "GIFT",
+                "dateLastUsed": null,
+                "isDefault": false,
+                "sortOrderIndex": 0
+              }
+            ],
+            "accountNumberLastFour": null,
+            "paymentInstrumentId": "fixture-paypal"
+          }
+        ],
+        "storedValueCards": []
+      }
+    }
+  },
+  "priceRequest": {
+    "variables": {
+      "order": {
+        "cart": {
+          "items": [
+            {
+              "quantity": 1,
+              "commerce": {
+                "sku": "11083122"
+              },
+              "childItems": [],
+              "key": "1033/single:1 Piece-0"
+            }
+          ],
+          "offers": []
+        },
+        "fulfillment": {
+          "consumptionType": "CONSUME_OUT_OF_STORE",
+          "collectionType": "IN_STORE"
+        },
+        "storeNumber": "17011-170949",
+        "enableTransparentPricing": true,
+        "enableNextGenLoyalty": true
+      }
+    }
+  },
+  "priceResponse": {
+    "data": {
+      "priceOrder": {
+        "__typename": "PricedOrderV2",
+        "cart": {
+          "items": [
+            {
+              "availability": "PURCHASABLE",
+              "availabilityLabel": null,
+              "calories": "250 Calories",
+              "key": "1033/single:1 Piece-0",
+              "label": "Butter Croissant",
+              "lineItems": [
+                {
+                  "key": "11083122@1",
+                  "label": "1 Serving",
+                  "price": 4.25,
+                  "priceLabel": "$4.25",
+                  "quantity": 1,
+                  "sku": "11083122"
+                }
+              ],
+              "isFavorite": false,
+              "isAvailable": true,
+              "offers": [],
+              "price": 4.25,
+              "priceLabel": "$4.25",
+              "quantity": 1,
+              "sku": "11083122",
+              "masterImageUrl": "https://cloudassets.starbucks.com/is/image/sbuxcorp/SBX20210915_Croissant-onGreen"
+            }
+          ],
+          "offers": [
+            {
+              "code": "4443",
+              "hasBeenApplied": false,
+              "description": "Oh no, we couldn't apply the Reward.",
+              "isEligible": true,
+              "key": "4443",
+              "label": "Use 60",
+              "price": null,
+              "priceLabel": null,
+              "stars": 60,
+              "type": "STAR_REWARD"
+            },
+            {
+              "code": "3601",
+              "hasBeenApplied": false,
+              "description": "Oh no, we couldn't apply the Reward.",
+              "isEligible": true,
+              "key": "3601",
+              "label": "Use 100",
+              "price": null,
+              "priceLabel": null,
+              "stars": 100,
+              "type": "STAR_REWARD"
+            }
+          ]
+        },
+        "expiresIn": 300,
+        "orderId": "11111111-1111-4111-8111-111111111111",
+        "currency": "USD",
+        "isTipEnabled": true,
+        "isOpenLoopTipEnabled": true,
+        "summary": {
+          "additionalFeeDescription": [],
+          "label": "Total",
+          "price": 4.25,
+          "priceLabel": "$4.25",
+          "lineItems": [
+            {
+              "key": "subtotal",
+              "label": "Subtotal",
+              "price": 4.25,
+              "priceLabel": "$4.25"
+            },
+            {
+              "key": "tax",
+              "label": "Tax",
+              "price": 0,
+              "priceLabel": "$0.00"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "submitRequest": {
+    "variables": {
+      "subInp": {
+        "orderId": "11111111-1111-4111-8111-111111111111",
+        "storeNumber": "17011-170949",
+        "tenders": [
+          {
+            "id": "fixture-paypal",
+            "tender": "PAYPAL",
+            "amount": 4.25
+          }
+        ],
+        "tipAmount": 0
+      },
+      "risk": {
+        "ccAgentName": "WebApp",
+        "platform": "Web",
+        "market": "US",
+        "deviceFingerprint": "fixture-iovation",
+        "reputation": {
+          "deviceFingerprint": "fixture-iovation",
+          "ubaId": "fixture-uba"
+        }
+      }
+    }
+  },
+  "submitResponse": {
+    "data": {
+      "submitOrder": {
+        "__typename": "ServiceTime"
+      }
+    }
+  },
+  "pickupResponse": {
+    "pickupTime": "2026-09-29T02:13:21+00:00",
+    "waitTimeEstimate": 152,
+    "source": "SPCDevice",
+    "created": "2026-09-29T02:10:51.4710483Z",
+    "orderId": "11111111-1111-4111-8111-111111111111",
+    "locationId": "17011",
+    "channel": "MOP",
+    "orderCreated": "2026-09-29T02:10:49+00:00",
+    "waitTimeEstimateMin": 180,
+    "waitTimeEstimateMax": 360
+  },
+  "estimate": {
+    "locationId": "17011",
+    "preOrderEstimateMin": 180,
+    "preOrderEstimateMax": 360,
+    "preOrderEstimate": 174
+  }
+}

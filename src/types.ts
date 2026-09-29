@@ -67,6 +67,8 @@ export interface Store {
   coordinates: { latitude: number; longitude: number };
   timeZone?: { timeZoneId: string };
   mobileOrdering?: { availability: string; guestOrdering?: boolean };
+  pickUpOptions?: Array<{ code: string; available: boolean }>;
+  acceptsNonSvcMop?: boolean;
 }
 export interface StoreLocation {
   distance: number;
@@ -165,4 +167,82 @@ export interface PreflightReport {
   checksPassed: boolean;
   orderSubmitted: false;
   note: string;
+}
+
+/** Fresh, caller-supplied context from the current Starbucks web session. */
+export interface OrderRisk {
+  ccAgentName: "WebApp";
+  platform: "Web";
+  market: "US";
+  deviceFingerprint: string;
+  reputation: { deviceFingerprint: string; ubaId: string };
+}
+export interface OrderPayment {
+  id: string;
+  tender:
+    | "PAYPAL"
+    | "VISA"
+    | "MASTERCARD"
+    | "AMEX"
+    | "DISCOVER"
+    | "VENMO"
+    | "SVC";
+  lastFour: string | null;
+  default: boolean;
+  balance?: { amount: number; currency: string };
+}
+export interface PreparedOrder {
+  version: 1;
+  state: "prepared";
+  accountId: string;
+  cart: Cart;
+  /** Exact cart/fulfillment input whose pricing produced quote.orderId. */
+  pricedOrder: OrderInput;
+  quote: PriceQuote;
+  /** Epoch milliseconds; expiresIn from pricing is in seconds. */
+  pricedAt: number;
+  expiresAt: number;
+  payment: OrderPayment;
+  tipAmount: number;
+  pickupEstimate: PickupEstimate;
+}
+export interface SubmitOrderRequest {
+  variables: {
+    subInp: {
+      orderId: string;
+      storeNumber: string;
+      tenders: Array<{
+        id: string;
+        tender: OrderPayment["tender"];
+        amount: number;
+      }>;
+      tipAmount: number;
+    };
+    risk: OrderRisk;
+  };
+}
+export interface SubmittedOrder {
+  state: "submitted";
+  orderId: string;
+  storeNumber: string;
+  serviceTime: { __typename: "ServiceTime" };
+}
+/** This endpoint reports an estimate, not a ready/collected lifecycle status. */
+export interface OrderPickupTime {
+  orderId: string;
+  locationId: string;
+  pickupTime: string;
+  waitTimeEstimate: number;
+  waitTimeEstimateMin: number;
+  waitTimeEstimateMax: number;
+  source: string;
+  channel: string;
+  created: string;
+  orderCreated: string;
+}
+export interface OrderStatus {
+  orderId: string;
+  storeNumber: string;
+  status: "pickup-estimate-available";
+  pickup: OrderPickupTime;
 }

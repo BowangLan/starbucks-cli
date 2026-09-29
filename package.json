@@ -2,7 +2,7 @@
   "name": "starbucks-web-sdk",
   "version": "0.1.0",
   "private": true,
-  "description": "Starbucks fetch SDK and Bun CLI with manual browser login. Order submission disabled.",
+  "description": "Starbucks fetch SDK and Bun CLI with order preparation and explicitly enabled submission.",
   "bin": {
     "starbucks": "./dist/cli.js"
   },
@@ -24,6 +24,9 @@
     }
   },
   "scripts": {
+    "order:audit-capture": "node scripts/audit-order-capture.mjs",
+    "order:probe": "node scripts/probe-order.mjs",
+    "order:context": "bun build scripts/order-context.mjs --target=node --packages=external --outfile=.starbucks/order-context.mjs > /dev/null && node .starbucks/order-context.mjs",
     "auth:fetch": "bun build scripts/fetch-login.mjs --target=node --packages=external --outfile=.starbucks/fetch-login.mjs > /dev/null && node --env-file=.env .starbucks/fetch-login.mjs",
     "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs",
     "history": "bun build scripts/history.mjs --target=node --packages=external --outfile=.starbucks/history.mjs && node .starbucks/history.mjs",

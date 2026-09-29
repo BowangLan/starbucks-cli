@@ -64,6 +64,15 @@ export function allowedContextRequest(url, method = "GET") {
   );
 }
 
+/** Checkout context generation cannot invoke credentials or any account/order API. */
+export function allowedCheckoutContextRequest(url, method = "GET") {
+  return (
+    allowedContextRequest(url, method) &&
+    url.hostname !== "auth.starbucks.com" &&
+    !url.pathname.startsWith("/apiproxy/")
+  );
+}
+
 /** Enforce a minimum pause; a longer server Retry-After always wins. No retry is scheduled. */
 export function retryNotBefore(value, now = Date.now()) {
   const seconds =

@@ -4,6 +4,11 @@ import fs from "node:fs/promises";
 import { CookieJar } from "tough-cookie";
 import { importCookieJar } from "./auth.js";
 import { writePrivate } from "./files.js";
+import {
+  importOrderRequestContext,
+  validateRequestContext,
+} from "./request-context.js";
+import type { OrderRequestContext } from "./request-context.js";
 import { StarbucksClient, HttpTransport } from "./client.js";
 import {
   createItem,
@@ -14,11 +19,24 @@ import {
   setItemQuantity,
 } from "./cart.js";
 import { preflight, summarizeWallet } from "./preflight.js";
-import type { Cart, OptionCategory } from "./types.js";
+import {
+  buildSubmissionRequest,
+  orderPayments,
+  prepareOrder,
+  summarizeOrderPayments,
+  summarizePreparedOrder,
+  validatePreparedOrder,
+} from "./order.js";
+import type {
+  Cart,
+  OptionCategory,
+  OrderRisk,
+  PreparedOrder,
+} from "./types.js";
 const program = new Command()
   .name("starbucks")
   .description(
-    "Starbucks web SDK: browse, customize, cart, and quote. Order submission disabled.",
+    "Starbucks web SDK: browse, customize, prepare an order, and check status. Submission requires explicit opt-in.",
   )
   .version("0.1.0")
   .option(
@@ -26,10 +44,16 @@ const program = new Command()
     "private HTTP cookie jar",
     ".starbucks/http-fetch-session.json",
   )
-  .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json");
+  .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json")
+  .option(
+    "--request-context <file>",
+    "private captured request protection headers",
+    ".starbucks/order-request-context.json",
+  );
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 async function session<T>(
   fn: (client: StarbucksClient) => Promise<T>,
+  allowOrderSubmission = false,
 ): Promise<T> {
   const file = program.opts().session;
   let jar: CookieJar;
@@ -44,7 +68,25 @@ async function session<T>(
       );
     throw new Error("Invalid HTTP cookie jar");
   }
-  const transport = new HttpTransport({ cookieJar: jar });
+  let requestContext: OrderRequestContext | undefined;
+  try {
+    const value: unknown = JSON.parse(
+      await fs.readFile(program.opts().requestContext, "utf8"),
+    );
+    validateRequestContext(value);
+    requestContext = value;
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code !== "ENOENT" ||
+      program.getOptionValueSource("requestContext") === "cli"
+    )
+      throw error;
+  }
+  const transport = new HttpTransport({
+    cookieJar: jar,
+    allowOrderSubmission,
+    requestContext,
+  });
   try {
     return await fn(new StarbucksClient(transport));
   } finally {
@@ -368,11 +410,220 @@ cart
       if (!report.checksPassed) process.exitCode = 1;
     }),
   );
-program
+const order = program
   .command("order")
-  .description("Disabled: this version cannot submit an order")
+  .description("Prepare, explicitly submit, or check an order")
   .action(() => {
-    throw new Error("Order submission is disabled. No order was placed.");
+    throw new Error(
+      "Use order prepare to review a checkout. No order was placed.",
+    );
+  });
+order
+  .command("import-context")
+  .description(
+    "Extract protection headers from a network dump locally; no API calls",
+  )
+  .requiredOption("--capture <directory>", "network-dump capture directory")
+  .option(
+    "--out <file>",
+    "private context file",
+    ".starbucks/order-request-context.json",
+  )
+  .action(async (o) => {
+    const context = await importOrderRequestContext(o.capture);
+    await writePrivate(o.out, context);
+    print({
+      file: o.out,
+      operations: Object.entries(context.operations).map(
+        ([operation, value]) => ({
+          operation,
+          capturedAt: value.capturedAt,
+          headerNames: Object.keys(value.headers),
+        }),
+      ),
+      orderSubmitted: false,
+    });
+  });
+order
+  .command("payments")
+  .description(
+    "List eligible existing MOP payments with safe selection indexes",
+  )
+  .option("--risk-file <file>", "optional fresh Web/US risk context")
+  .action((o) =>
+    session(async (s) => {
+      const risk = o.riskFile
+        ? JSON.parse(await fs.readFile(o.riskFile, "utf8"))
+        : undefined;
+      print(summarizeOrderPayments(orderPayments(await s.wallet(risk))));
+    }),
+  );
+order
+  .command("prepare")
+  .description(
+    "Check store, menu, wallet, rewards, pickup, and pricing; stop before submit",
+  )
+  .option(
+    "--payment-index <number>",
+    "index from order payments; otherwise use MOP default",
+  )
+  .option("--tip <amount>", "tip amount", "0")
+  .option(
+    "--risk-file <file>",
+    "optional fresh Web/US risk context for the wallet read",
+  )
+  .option(
+    "--out <file>",
+    "private prepared checkout",
+    ".starbucks/prepared-order.json",
+  )
+  .action((o) =>
+    session(async (s) => {
+      const risk = o.riskFile
+        ? (JSON.parse(await fs.readFile(o.riskFile, "utf8")) as OrderRisk)
+        : undefined;
+      const prepared = await prepareOrder(s, await readCart(), {
+        paymentIndex:
+          o.paymentIndex === undefined ? undefined : Number(o.paymentIndex),
+        tipAmount: Number(o.tip),
+        risk,
+      });
+      await writePrivate(o.out, prepared);
+      print({ ...summarizePreparedOrder(prepared), file: o.out });
+    }),
+  );
+order
+  .command("request")
+  .description("Build a submission request locally; never send it")
+  .option(
+    "--file <file>",
+    "prepared checkout",
+    ".starbucks/prepared-order.json",
+  )
+  .requiredOption(
+    "--risk-file <file>",
+    "fresh risk context; never reuse captured risk tokens",
+  )
+  .option(
+    "--out <file>",
+    "private submission request",
+    ".starbucks/submit-order-request.json",
+  )
+  .action(async (o) => {
+    const prepared = JSON.parse(
+      await fs.readFile(o.file, "utf8"),
+    ) as PreparedOrder;
+    const request = buildSubmissionRequest(
+      prepared,
+      JSON.parse(await fs.readFile(o.riskFile, "utf8")),
+    );
+    await writePrivate(o.out, request);
+    print({
+      ...summarizePreparedOrder(prepared),
+      requestFile: o.out,
+      networkRequests: 0,
+    });
+  });
+order
+  .command("status")
+  .requiredOption("--id <uuid>", "priced/submitted order ID")
+  .requiredOption("--store <number>", "full store number")
+  .description("Read the pickup estimate; this is not a ready/collected status")
+  .action((o) =>
+    session(async (s) => print(await s.orderStatus(o.id, o.store))),
+  );
+order
+  .command("previous")
+  .requiredOption("--store <number>", "full store number")
+  .option("--limit <number>", "up to 40 previous orders", "40")
+  .option("--out <file>", "save full results privately and print a count")
+  .action((o) =>
+    session(async (s) => {
+      const previous = await s.previousOrders(o.store, Number(o.limit));
+      if (o.out) {
+        await writePrivate(o.out, previous);
+        print({ count: previous.length, file: o.out });
+      } else print(previous);
+    }),
+  );
+order
+  .command("submit")
+  .description(
+    "Place a real order once; requires --confirm and fresh risk context",
+  )
+  .option(
+    "--file <file>",
+    "prepared checkout",
+    ".starbucks/prepared-order.json",
+  )
+  .requiredOption("--risk-file <file>", "fresh risk context for this session")
+  .option("--confirm", "authorize the real purchase shown by order prepare")
+  .action(async (o) => {
+    if (o.confirm !== true)
+      throw new Error("Submission requires --confirm. No order was placed.");
+    const prepared = JSON.parse(
+      await fs.readFile(o.file, "utf8"),
+    ) as PreparedOrder;
+    const risk = JSON.parse(await fs.readFile(o.riskFile, "utf8")) as OrderRisk;
+    buildSubmissionRequest(prepared, risk);
+    await session(async (s) => {
+      const user = await s.user();
+      if (user.exId !== prepared.accountId)
+        throw new Error("Prepared order belongs to a different account");
+      const payment = orderPayments(await s.wallet(risk)).find(
+        (p) =>
+          p.id === prepared.payment.id && p.tender === prepared.payment.tender,
+      );
+      if (!payment) throw new Error("Selected payment is no longer available");
+      prepared.payment = payment;
+      validatePreparedOrder(prepared);
+      const request = buildSubmissionRequest(prepared, risk);
+      // A durable order-ID journal prevents duplicate attempts across processes/file copies.
+      const journal = `.starbucks/order-attempts/${request.variables.subInp.orderId}.json`;
+      await fs.mkdir(".starbucks/order-attempts", {
+        recursive: true,
+        mode: 0o700,
+      });
+      const attempt = {
+        state: "attempted",
+        orderId: request.variables.subInp.orderId,
+        storeNumber: prepared.cart.storeNumber,
+      };
+      try {
+        await fs.writeFile(journal, JSON.stringify(attempt, null, 2), {
+          flag: "wx",
+          mode: 0o600,
+        });
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST")
+          throw new Error(
+            "Order submission already attempted. Check order status and history; do not retry.",
+          );
+        throw error;
+      }
+      const submitted = await s.submitOrder(request, { confirm: true });
+      await writePrivate(journal, submitted);
+      // Persist acceptance before attempting a follow-up read that can independently fail.
+      await writePrivate(o.file, {
+        ...prepared,
+        state: "submitted",
+        submitted,
+      });
+      try {
+        print({
+          ...submitted,
+          status: await s.orderStatus(submitted.orderId, submitted.storeNumber),
+          journal,
+        });
+      } catch {
+        print({
+          ...submitted,
+          status: "unavailable",
+          note: "Order accepted; check status again without resubmitting.",
+          journal,
+        });
+      }
+    }, true);
   });
 await program.parseAsync().catch((error) => {
   console.error(error instanceof Error ? error.message : "Command failed");
