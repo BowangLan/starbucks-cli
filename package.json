@@ -29,7 +29,7 @@
     "history": "bun build scripts/history.mjs --target=node --packages=external --outfile=.starbucks/history.mjs && node .starbucks/history.mjs",
     "test:history": "bun test tests/history.test.mjs",
     "build": "bun -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && bun --bun tsc",
-    "test": "bun run build && bun test ./tests",
+    "test": "bun run build && bun test ./tests --path-ignore-patterns '**/fetch-*.test.mjs' && bun run test:fetch",
     "starbucks": "bun dist/cli.js",
     "format": "oxfmt --write .",
     "lint": "oxlint --deny-warnings src tests scripts",

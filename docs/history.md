@@ -54,4 +54,4 @@ Live verification on 2026-09-29 reused the successful fetch-login session:
 
 The bundle shows receipts for `Transaction` or `TransactionWithPoints` entries whose transaction type is `Purchase` or `Redemption`. Use an ID returned by your own history. Monetary values remain in their original API representation; no currency units are inferred.
 
-Run `bun run test:history` for the request-shape, pagination, response-validation, and endpoint-boundary regression tests. The independent history bundle does not depend on the pre-existing missing `src/preflight.ts` module that currently blocks the full project build.
+Run `bun run test:history` for the request-shape, pagination, response-validation, and endpoint-boundary regression tests. Run `bun run check` for the full build, lint, formatting, and test suite.

@@ -28,4 +28,8 @@ The successful experiment's redacted local trace is `.starbucks/debug-fetch-logi
 
 This remains experimental. It executes the site's current JavaScript in a DOM emulator; it is not a static HTTP form replay. The emulator implements the document-write and cross-origin message behavior needed by these scripts and routes observed resource, XHR, fetch, and beacon traffic through the same bounded fetch transport. It omits WebSockets, canvas/WebGL, and optional analytics. Those omissions did not prevent the observed login. Endpoint names and page scripts can change, and one success does not establish reliability across other accounts or environments.
 
-The project-wide build currently has a pre-existing failure: `src/index.ts` and `src/cli.ts` import missing `src/preflight.ts`. The independent `auth:fetch` bundle and focused regression tests do not depend on that module.
+The standard CLI can verify the saved fetch-login session:
+
+```sh
+bun run starbucks auth status
+```

@@ -24,7 +24,7 @@ Observed on September 29, 2026 UTC:
 
 - The new `bun run auth:fetch` flow generated fresh context using the current page scripts and native Node fetch. Its single credential POST returned 302, OAuth completed, and authenticated `get-user` returned 200. See [fetch login verification](fetch-login.md).
 - The resulting session loaded all three transaction-history pages with HTTP 200, returning 114 unique visible entries. A purchase receipt and the empty eGift order list also returned 200. See [history contracts and verification](history.md).
-- Focused login/history tests, lint, formatting, and the independent command bundles pass. The full SDK/CLI build remains blocked by existing imports of missing `src/preflight.ts`.
+- The missing `src/preflight.ts` module has been restored. The full SDK/CLI build succeeds, and `auth status` verifies the fetch-login session. Regression tests exercise the built CLI's startup and account verification.
 
 ## Reproduction
 

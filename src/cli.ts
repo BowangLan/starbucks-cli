@@ -24,7 +24,7 @@ const program = new Command()
   .option(
     "--session <file>",
     "private HTTP cookie jar",
-    ".starbucks/http-session.json",
+    ".starbucks/http-fetch-session.json",
   )
   .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json");
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
@@ -150,6 +150,10 @@ auth.command("status").action(() =>
     print({ authenticated: true, session: program.opts().session });
   }),
 );
+program
+  .command("whoami")
+  .description("Show the signed-in user profile")
+  .action(() => session(async (s) => print(await s.user())));
 auth
   .command("import")
   .requiredOption(
@@ -356,9 +360,7 @@ cart
   );
 cart
   .command("preflight")
-  .description(
-    "Check account, store, availability, pickup, price, and wallet; never submit",
-  )
+  .description("Check account, price, and wallet; never submit")
   .action(() =>
     session(async (s) => {
       const report = await preflight(s, await readCart());

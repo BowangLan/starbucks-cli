@@ -8,7 +8,7 @@ An unofficial TypeScript SDK and Bun CLI. Store/menu/cart/account API operations
 bun run starbucks auth login
 ```
 
-Enter your username and password in the browser. The CLI waits for the signed-in redirect, verifies the account in that browser, writes `.starbucks/http-session.json` privately, and closes it automatically. It does not read credentials from `.env`, fill the form, or record login traffic. Closing the window or pressing Ctrl+C cancels without replacing the existing session. Default timeout is five minutes; use `auth login --timeout 600` for ten minutes.
+Enter your username and password in the browser. The CLI waits for the signed-in redirect, verifies the account in that browser, writes `.starbucks/http-fetch-session.json` privately, and closes it automatically. It does not read credentials from `.env`, fill the form, or record login traffic. Closing the window or pressing Ctrl+C cancels without replacing the existing session. Default timeout is five minutes; use `auth login --timeout 600` for ten minutes.
 
 Successful browser login does not guarantee that every later fetch operation will be accepted. Account/Card reads have succeeded with imported cookies; pricing and wallet have previously returned 403/429. See [verification](docs/verification.md).
 
@@ -52,13 +52,16 @@ Authenticated requests require session cookies. Import accepts serialized `tough
 ```sh
 bun run starbucks auth import --file /private/path/cookie-jar.json
 bun run starbucks auth status
+bun run starbucks whoami
 bun run starbucks cards
 bun run starbucks wallet
 bun run starbucks cart quote
 bun run starbucks cart preflight
 ```
 
-The default HTTP session file is `.starbucks/http-session.json`; override with `--session <file>`. Requests use domain/path/expiry-aware cookies and retain response `Set-Cookie` updates. API errors do not automatically launch a browser or retry.
+The default HTTP session file is `.starbucks/http-fetch-session.json`; override with `--session <file>`. Requests use domain/path/expiry-aware cookies and retain response `Set-Cookie` updates. API errors do not automatically launch a browser or retry.
+
+`whoami` prints the signed-in user profile as JSON. The SDK equivalent is `await client.user()`, which calls `POST /apiproxy/v1/orchestra/get-user` using the session cookies.
 
 `cart preflight` fetches account status, a member price quote, and wallet data. It does not open a payment screen or establish final order acceptance. `cards` and `wallet` CLI outputs mask card numbers and omit payment secrets. SDK methods return the underlying API data.
 
@@ -110,7 +113,7 @@ import { loginWithBrowser } from "starbucks-web-sdk/login";
 import { StarbucksClient, HttpTransport } from "starbucks-web-sdk";
 
 const cookieJar = await loginWithBrowser({
-  sessionFile: ".starbucks/http-session.json",
+  sessionFile: ".starbucks/http-fetch-session.json",
 });
 const client = new StarbucksClient(new HttpTransport({ cookieJar }));
 ```
