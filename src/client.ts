@@ -9,6 +9,8 @@ import type {
   Cart,
   PriceQuote,
   PickupEstimate,
+  TransactionHistory,
+  HistoryOptions,
 } from "./types.js";
 import { toOrder } from "./cart.js";
 import { allowedRequest, ORIGIN } from "./safety.js";
@@ -224,6 +226,96 @@ export class StarbucksClient {
         "Wallet unavailable; consumer sign-in is required",
       );
     return data.starPayWallet as Record<string, unknown>;
+  }
+
+  async transactionHistory({
+    offset = 0,
+    limit = 50,
+  }: HistoryOptions = {}): Promise<TransactionHistory> {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 50
+    )
+      throw new Error(
+        "Invalid history pagination: offset must be nonnegative and limit must be 1–50",
+      );
+    const data = await this.operation("get-transaction-history", {
+      offset,
+      limit,
+    });
+    const history = data.transactionHistoryV2 as TransactionHistory | undefined;
+    const paging = history?.paging;
+    if (
+      !Array.isArray(history?.historyItems) ||
+      !paging ||
+      ![paging.total, paging.offset, paging.limit, paging.returned].every(
+        (n) => Number.isSafeInteger(n) && n >= 0,
+      ) ||
+      paging.offset !== offset ||
+      paging.limit !== limit ||
+      paging.returned > limit
+    )
+      throw new StarbucksError("Invalid transaction history response");
+    return history;
+  }
+
+  async *transactionHistoryPages(
+    options: HistoryOptions = {},
+  ): AsyncGenerator<TransactionHistory> {
+    let offset = options.offset ?? 0;
+    for (;;) {
+      const page = await this.transactionHistory({ ...options, offset });
+      yield page;
+      const next = page.paging.offset + page.paging.returned;
+      if (next >= page.paging.total) return;
+      if (next <= offset)
+        throw new StarbucksError("History pagination did not advance");
+      offset = next;
+    }
+  }
+
+  async historyReceipt(historyId: string): Promise<Record<string, unknown>> {
+    if (typeof historyId !== "string" || !historyId.trim())
+      throw new Error("A history id is required");
+    const data = await this.operation("get-history-item-receipt", {
+      historyId,
+    });
+    if (
+      !data.activity ||
+      typeof data.activity !== "object" ||
+      Array.isArray(data.activity)
+    )
+      throw new StarbucksError("History receipt unavailable");
+    return data.activity as Record<string, unknown>;
+  }
+
+  async giftOrderHistory(): Promise<Record<string, unknown>[]> {
+    const data = (await this.transport.request(
+      "/apiproxy/v1/account/history/egift/order-list",
+    )) as { orders?: Record<string, unknown>[] };
+    if (!Array.isArray(data?.orders))
+      throw new StarbucksError("Gift order history unavailable");
+    return data.orders;
+  }
+
+  async giftOrderDetails(orderId: string): Promise<Record<string, unknown>> {
+    if (typeof orderId !== "string" || !orderId.trim())
+      throw new Error("An order id is required");
+    const data = await this.transport.request(
+      "/apiproxy/v1/account/history/egift/order-details",
+      { orderId },
+    );
+    if (
+      !data ||
+      typeof data !== "object" ||
+      Array.isArray(data) ||
+      ("purchaseStatus" in data && data.purchaseStatus === "error")
+    )
+      throw new StarbucksError("Gift order details unavailable");
+    return data as Record<string, unknown>;
   }
 
   async cards(): Promise<unknown> {

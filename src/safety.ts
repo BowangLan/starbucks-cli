@@ -1,6 +1,8 @@
 export const ORIGIN = "https://www.starbucks.com";
 export const READ_OPERATIONS = new Set([
   "get-user",
+  "get-transaction-history",
+  "get-history-item-receipt",
   "get-user-mfa-factors",
   "get-privacy-permissions",
   "get-starpay-wallet",
@@ -15,14 +17,18 @@ export function allowedRequest(url: string, method: string): boolean {
   if (u.origin !== ORIGIN) return false;
   const p = u.pathname;
   if (method === "GET")
-    return /^\/apiproxy\/v1\/(locations|ordering\/menu|ordering\/\d+\/[a-z]+|ordering\/pre-order-pickup-estimate\/\d+)$/.test(
-      p,
+    return (
+      p === "/apiproxy/v1/account/history/egift/order-list" ||
+      /^\/apiproxy\/v1\/(locations|ordering\/menu|ordering\/\d+\/[a-z]+|ordering\/pre-order-pickup-estimate\/\d+)$/.test(
+        p,
+      )
     );
   if (method === "POST")
     return (
-      p.startsWith("/apiproxy/v1/orchestra/") &&
-      (READ_OPERATIONS.has(p.slice("/apiproxy/v1/orchestra/".length)) ||
-        PRICE_OPERATIONS.has(p.slice("/apiproxy/v1/orchestra/".length)))
+      p === "/apiproxy/v1/account/history/egift/order-details" ||
+      (p.startsWith("/apiproxy/v1/orchestra/") &&
+        (READ_OPERATIONS.has(p.slice("/apiproxy/v1/orchestra/".length)) ||
+          PRICE_OPERATIONS.has(p.slice("/apiproxy/v1/orchestra/".length))))
     );
   return false;
 }

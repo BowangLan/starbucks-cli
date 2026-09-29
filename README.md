@@ -116,3 +116,21 @@ const client = new StarbucksClient(new HttpTransport({ cookieJar }));
 ```
 
 `loginWithBrowser` accepts `timeoutMs` and an AbortSignal. The root SDK import remains independent of Playwright. The older low-level fetch `login(credentials, options)` remains experimental; the CLI uses manual browser login. See the [authentication reference](docs/reference.md#authentication-functions).
+
+An experimental credential login now also works with native Node `fetch` and a JavaScript DOM, without launching a browser:
+
+```sh
+# .env: STARBUCKS_USERNAME and STARBUCKS_PASSWORD
+bun run auth:fetch
+```
+
+It runs the current vendor, Iovation, and Accertify scripts, keeps their cookies and per-origin storage consistent, and submits credentials once. A verified session is saved to `.starbucks/http-fetch-session.json`; redacted diagnostics go under `.starbucks/fetch-login/`. Use `bun run auth:fetch --prepare-only` to check context generation without submitting credentials. Node 24.21+ and Bun are required. See [fetch login verification](docs/fetch-login.md) for the observed result and limitations.
+
+Read order/rewards history with that session:
+
+```sh
+bun run history --all --output .starbucks/order-history.json
+bun run history --receipt '<history-id>' --output .starbucks/order-receipt.json
+```
+
+History, receipt lookup, and eGift-history reads are implemented in the SDK. See [history API contracts and commands](docs/history.md).

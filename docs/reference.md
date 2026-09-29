@@ -4,7 +4,7 @@ This documents the fetch-based SDK and manual browser login. Source: [CLI](../sr
 
 API endpoint paths below use **`https://www.starbucks.com`**. Login also uses **`https://auth.starbucks.com`**. API operations use standard `fetch`. Explicit `auth login` uses Playwright; failed API calls do not launch it.
 
-**Verification:** public reads, imported-session account verification, and Card retrieval worked through production fetch. Pricing returned 403/429; wallet returned 403. Credential-only login is implemented and mock-tested but not verified live; it does not generate the browser fingerprint/protection signals. See [verification evidence](verification.md).
+**Verification:** public reads, imported-session account verification, and Card retrieval worked through production fetch. The new [fetch login runner](fetch-login.md) also completed credential login with fresh context, and its session loaded [history and receipts](history.md). Pricing previously returned 403/429; wallet returned 403. The low-level `login()` helper alone does not generate browser context. See [verification evidence](verification.md).
 
 ## CLI command → SDK → Starbucks API
 
@@ -250,4 +250,4 @@ bun run starbucks cart show
 bun run starbucks cart quote
 ```
 
-No `session start`, `--headed`, payment selection, card reload, rewards application, or order-submission implementation exists in the current runtime. `order` always fails before network access. `auth login` provides manual browser sign-in; the separate experimental fetch credential function remains unverified live.
+No `session start`, `--headed`, payment selection, card reload, rewards application, or order-submission implementation exists in the current runtime. `order` always fails before network access. `auth login` provides manual browser sign-in. The separate `bun run auth:fetch` runner has completed a live credential login with fresh script-generated context; see its [verification and limitations](fetch-login.md).

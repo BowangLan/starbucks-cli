@@ -129,6 +129,23 @@ export interface Transport {
   request(path: string, body?: unknown): Promise<unknown>;
 }
 
+export interface HistoryOptions {
+  offset?: number;
+  /** The client supports the captured page size of up to 50 records. */
+  limit?: number;
+}
+export interface HistoryPaging {
+  total: number;
+  offset: number;
+  limit: number;
+  /** Advance by this value; it can exceed historyItems.length. */
+  returned: number;
+}
+export interface TransactionHistory {
+  paging: HistoryPaging;
+  historyItems: Array<Record<string, unknown>>;
+}
+
 /** Raw estimate values as returned by Starbucks; no inferred unit conversion. */
 export interface PickupEstimate {
   locationId: string;

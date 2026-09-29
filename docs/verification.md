@@ -20,6 +20,12 @@ Observed on September 25, 2026:
 
 Successful browser login does not guarantee that subsequent fetch operations will be accepted. Session cookies can expire, and these observations are not reliability guarantees. Local cart commands do not synchronize with the website cart. API errors do not trigger automatic retries or browser fallback.
 
+Observed on September 29, 2026 UTC:
+
+- The new `bun run auth:fetch` flow generated fresh context using the current page scripts and native Node fetch. Its single credential POST returned 302, OAuth completed, and authenticated `get-user` returned 200. See [fetch login verification](fetch-login.md).
+- The resulting session loaded all three transaction-history pages with HTTP 200, returning 114 unique visible entries. A purchase receipt and the empty eGift order list also returned 200. See [history contracts and verification](history.md).
+- Focused login/history tests, lint, formatting, and the independent command bundles pass. The full SDK/CLI build remains blocked by existing imports of missing `src/preflight.ts`.
+
 ## Reproduction
 
 ```sh
