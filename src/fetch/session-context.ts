@@ -1,8 +1,11 @@
 import type { CookieJar } from "tough-cookie";
-import type { OrderRisk } from "./types.js";
-import { ORIGIN, SUBMIT_ORDER_PATH } from "./safety.js";
-import { FetchDOM, pause } from "./fetch-dom.mjs";
-import { allowedCheckoutContextRequest } from "./fetch-policy.mjs";
+import type { OrderRisk } from "../types.js";
+import {
+  ORIGIN,
+  SUBMIT_ORDER_PATH,
+  allowedCheckoutContextRequest,
+} from "./policy.js";
+import { FetchDOM, pause } from "./dom.mjs";
 
 const PREFIX = "x-dq7hy5l1-";
 const CORE_FIELDS = ["a", "b", "c", "d", "f", "z"];
@@ -178,7 +181,7 @@ export class LiveSessionContext implements SessionContext {
         });
         let headers = this.preparing.headers ?? new Headers();
         if (!this.valid(headers)) {
-          // The same vendor form hook used by auth:fetch can produce the core proof.
+          // The same vendor form hook used by the fetch login can produce the core proof.
           // FetchDOM records form submission locally; no form is sent to Starbucks.
           const form = this.window.document.createElement("form");
           form.method = "POST";

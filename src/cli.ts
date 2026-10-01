@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 import { Command } from "commander";
 import fs from "node:fs/promises";
-import { CookieJar } from "tough-cookie";
-import { importCookieJar } from "./auth.js";
+import path from "node:path";
 import { writePrivate } from "./files.js";
-import { StarbucksClient, HttpTransport } from "./client.js";
+import type { StarbucksClient } from "./client.js";
+import { LoginError } from "./errors.js";
+import { FetchStarbucksClient } from "./fetch/client.js";
+import { FileSessionStore } from "./fetch/session.js";
 import {
   createItem,
   toOrder,
@@ -41,32 +43,19 @@ const program = new Command()
   )
   .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json");
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
+/** One client per command; it loads the --session cookies and saves them on close. */
 async function session<T>(
   fn: (client: StarbucksClient) => Promise<T>,
   allowOrderSubmission = false,
 ): Promise<T> {
-  const file = program.opts().session;
-  let jar: CookieJar;
-  try {
-    jar = await CookieJar.deserialize(
-      JSON.parse(await fs.readFile(file, "utf8")),
-    );
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      throw new Error(
-        "No HTTP session. Use bun run auth:fetch or auth import --file <file>.",
-      );
-    throw new Error("Invalid HTTP cookie jar");
-  }
-  const transport = new HttpTransport({
-    cookieJar: jar,
+  const client = new FetchStarbucksClient({
+    session: new FileSessionStore(program.opts().session),
     allowOrderSubmission,
   });
   try {
-    return await fn(new StarbucksClient(transport));
+    return await fn(client);
   } finally {
-    await transport.close();
-    await writePrivate(file, await jar.serialize());
+    await client.close();
   }
 }
 async function readCart(): Promise<Cart> {
@@ -80,7 +69,6 @@ async function readCart(): Promise<Cart> {
 async function saveCart(cart: Cart): Promise<void> {
   await writePrivate(program.opts().cart, cart);
 }
-const api = new StarbucksClient();
 program
   .command("stores")
   .requiredOption("--place <place>")
@@ -89,11 +77,13 @@ program
   .action(async (o) => {
     if ((o.lat === undefined) !== (o.lng === undefined))
       throw new Error("Provide both --lat and --lng");
-    const stores = await api.stores(
-      o.place,
-      o.lat === undefined
-        ? undefined
-        : { lat: Number(o.lat), lng: Number(o.lng) },
+    const stores = await session((api) =>
+      api.stores(
+        o.place,
+        o.lat === undefined
+          ? undefined
+          : { lat: Number(o.lat), lng: Number(o.lng) },
+      ),
     );
     print(
       stores.map((s) => ({
@@ -119,7 +109,9 @@ program
     )
       throw new Error("Select a pickup café with the store command first");
     print(
-      o.search ? await api.searchMenu(o.search, store) : await api.menu(store),
+      await session<unknown>((api) =>
+        o.search ? api.searchMenu(o.search, store) : api.menu(store),
+      ),
     );
   });
 program
@@ -128,7 +120,7 @@ program
   .option("--form <form>", "product form", "hot")
   .option("--options", "show sizes and customization options")
   .action(async (id, o) => {
-    const p = await api.product(Number(id), o.form);
+    const p = await session((api) => api.product(Number(id), o.form));
     if (!o.options) {
       print(p);
       return;
@@ -179,13 +171,63 @@ auth
     "cookie jar, storage-state JSON, or exported cookie array",
   )
   .action(async (o) => {
-    const jar = await importCookieJar(
-      JSON.parse(await fs.readFile(o.file, "utf8")),
-    );
-    // Verify via direct fetch before replacing the existing session file.
-    await new StarbucksClient(new HttpTransport({ cookieJar: jar })).user();
-    await writePrivate(program.opts().session, await jar.serialize());
+    const input = JSON.parse(await fs.readFile(o.file, "utf8"));
+    // The client verifies the account before replacing the session file.
+    await session((client) => client.importSession(input));
     print({ authenticated: true, session: program.opts().session });
+  });
+program
+  .command("login")
+  .description(
+    "Sign in without a browser using STARBUCKS_USERNAME and STARBUCKS_PASSWORD; may stop working after an IP address change",
+  )
+  .option(
+    "--prepare-only",
+    "check sign-in preparation without submitting credentials",
+  )
+  .option("--verbose", "show redacted request diagnostics")
+  .action(async (o) => {
+    const username = process.env.STARBUCKS_USERNAME;
+    const password = process.env.STARBUCKS_PASSWORD;
+    if (!username || !password)
+      throw new Error("Set STARBUCKS_USERNAME and STARBUCKS_PASSWORD in .env.");
+    const sessionFile = program.opts().session;
+    const startedAt = Date.now();
+    try {
+      const result = await session((client) =>
+        client.login(
+          { username, password },
+          {
+            prepareOnly: o.prepareOnly === true,
+            stateDir: path.join(path.dirname(sessionFile), "fetch-login"),
+            onProgress: (message) => console.error(message),
+            onDiagnostic: o.verbose
+              ? (entry) => console.error(JSON.stringify(entry))
+              : undefined,
+          },
+        ),
+      );
+      const elapsedSeconds = Number(
+        ((Date.now() - startedAt) / 1000).toFixed(1),
+      );
+      if (o.verbose && result.traceFile)
+        console.error(`Details: ${result.traceFile}`);
+      print(
+        result.authenticated
+          ? { authenticated: true, session: sessionFile, elapsedSeconds }
+          : {
+              authenticated: false,
+              credentialsSubmitted: false,
+              elapsedSeconds,
+            },
+      );
+    } catch (error) {
+      if (error instanceof LoginError) {
+        if (error.traceFile) console.error(`Details: ${error.traceFile}`);
+        throw new Error(`Sign-in failed: ${error.message}`);
+      }
+      throw error;
+    }
   });
 program.command("cards").action(() =>
   session(async (s) => {
@@ -280,10 +322,9 @@ program
   .requiredOption("--lng <number>")
   .description("Select the pickup café")
   .action(async (o) => {
-    const locations = await api.stores(o.place, {
-      lat: Number(o.lat),
-      lng: Number(o.lng),
-    });
+    const locations = await session((api) =>
+      api.stores(o.place, { lat: Number(o.lat), lng: Number(o.lng) }),
+    );
     const location = locations.find(
       (l) => l.store.name.toLowerCase() === o.name.toLowerCase(),
     );
@@ -307,7 +348,9 @@ cart
   .option("--shots <count>")
   .option("--quantity <count>", "quantity", "1")
   .action(async (o) => {
-    const product = await api.product(Number(o.product), o.form);
+    const product = await session((api) =>
+      api.product(Number(o.product), o.form),
+    );
     const result = addItem(
       await readCart(),
       createItem(product, {
@@ -368,7 +411,8 @@ cart
   .command("pickup")
   .description("Read the current pickup estimate for the selected café")
   .action(async () => {
-    print(await api.pickupEstimate((await readCart()).storeNumber));
+    const { storeNumber } = await readCart();
+    print(await session((api) => api.pickupEstimate(storeNumber)));
   });
 cart
   .command("build")
@@ -381,7 +425,9 @@ cart
   .option("--quantity <count>", "quantity", "1")
   .option("--out <file>", "local draft cart", ".starbucks/draft-cart.json")
   .action(async (o) => {
-    const product = await api.product(Number(o.product), o.form);
+    const product = await session((api) =>
+      api.product(Number(o.product), o.form),
+    );
     const result: Cart = {
       version: 1,
       storeNumber: o.store,

@@ -1,12 +1,12 @@
 # Member order flow
 
-The endpoint contracts were researched from browser observations and sanitized fixtures; the CLI/client runtime depends only on the credentials saved by `auth:fetch` and current website scripts. Checkout review uses live reads and pricing; submission is a separate, explicitly enabled operation. **No order was placed during implementation or verification.** Submission and post-submit lookup were tested with sanitized responses and injected fetch.
+The endpoint contracts were researched from browser observations and sanitized fixtures; the CLI/client runtime depends only on the credentials saved by `starbucks login` and current website scripts. Checkout review uses live reads and pricing; submission is a separate, explicitly enabled operation. **No order was placed during implementation or verification.** Submission and post-submit lookup were tested with sanitized responses and injected fetch.
 
 ## Review checkout and build the submit payload
 
 ```sh
 bun run build
-bun run auth:fetch
+bun run starbucks login
 bun run starbucks store --place 'Palo Alto' --name '3885 El Camino Real' --lat 37.412252 --lng=-122.135089
 bun run starbucks cart add --product 1033 --form single
 bun run starbucks order payments
@@ -22,15 +22,15 @@ Payment selection uses the wallet's **MOP** action, not its reload/default field
 
 ## Session-only runtime
 
-`auth:fetch` saves `.starbucks/http-fetch-session.json`. This is the only credential input to the CLI/client. There is no capture import command, request-context option, or implicit read of an old header file. Network dumps remain research material and sanitized test fixtures only.
+`starbucks login` saves `.starbucks/http-fetch-session.json`. This is the only credential input to the CLI/client. There is no capture import command, request-context option, or implicit read of an old header file. Network dumps remain research material and sanitized test fixtures only.
 
-Before a protected operation, the SDK downloads the current vendor/Iovation/Accertify scripts into an ephemeral FetchDOM context using the saved cookie jar. It first observes the vendor fetch hook locally. If that hook emits no proof, it uses the vendor form hook also used by `auth:fetch`; FetchDOM intercepts that form locally and never sends it. Proof must contain all six core fields and its bootstrap token must match the freshly downloaded script. The optional `a0` field is retained when generated. Missing proof, timeouts, or bootstrap errors stop before the API request. No imported or cached proof is used as a fallback.
+Before a protected operation, the SDK downloads the current vendor/Iovation/Accertify scripts into an ephemeral FetchDOM context using the saved cookie jar. It first observes the vendor fetch hook locally. If that hook emits no proof, it uses the vendor form hook also used by `starbucks login`; FetchDOM intercepts that form locally and never sends it. Proof must contain all six core fields and its bootstrap token must match the freshly downloaded script. The optional `a0` field is retained when generated. Missing proof, timeouts, or bootstrap errors stop before the API request. No imported or cached proof is used as a fallback.
 
-This fresh form-proof path has local synthetic integration coverage and offline vendor-script experiments. On October 1, 2026, the live Palo Alto cart quote succeeded using this path and the current `auth:fetch` session. The previous seven-header replay result is not evidence for the current implementation. Live order submission remains untested.
+This fresh form-proof path has local synthetic integration coverage and offline vendor-script experiments. On October 1, 2026, the live Palo Alto cart quote succeeded using this path and the current `starbucks login` session. The previous seven-header replay result is not evidence for the current implementation. Live order submission remains untested.
 
 `order build-submit` and explicitly confirmed `order submit` generate Iovation/Accertify risk automatically from the auth session. The `--risk-file` option remains available as a diagnostic override. The CLI uses Node 24.21+ because Bun cannot execute the vendor runtime reliably. SDK applications should call `await client.close()` in `finally` to release their ephemeral context.
 
-Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: run `auth:fetch` again. Profile access alone is insufficient. No automatic credential resubmission, order retry, or browser fallback is performed.
+Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: run `starbucks login` again. Profile access alone is insufficient. No automatic credential resubmission, order retry, or browser fallback is performed.
 
 ## Captured contracts
 
@@ -49,7 +49,7 @@ Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: r
 | `000426`           | GET `/apiproxy/v1/ordering/pickup-time/{orderId}/17011`     | `orderPickupTime()` / `orderStatus()` after acknowledged submission.                          |
 | `000458`           | POST `/apiproxy/v1/orchestra/get-previous-orders`           | `previousOrders(fullStoreNumber, limit=40)` sends `locale: en-US`, short store number, limit. |
 
-The other two application endpoints in the complete dump are `get-favorite-products` (`000080`, `000342`, variables `locale` plus optional short `storeNumber`) and `locations/static-map` (`000456`). They supply optional favorites and a map image; neither is required to prepare, submit, or look up the captured order. All 21 application requests have captured response bodies. `bun run order:audit-capture <directory>` inventories every request and emits API field paths, header names, cookie names, body hashes, and missing-body checks without response values.
+The other two application endpoints in the complete dump are `get-favorite-products` (`000080`, `000342`, variables `locale` plus optional short `storeNumber`) and `locations/static-map` (`000456`). They supply optional favorites and a map image; neither is required to prepare, submit, or look up the captured order. All 21 application requests have captured response bodies.
 
 The submission body is:
 
@@ -82,7 +82,7 @@ Captured success is `{data:{submitOrder:{__typename:"ServiceTime"}}}`. It contai
 
 ## Explicit submission and status
 
-`order submit --file <prepared-file> --confirm` **places a real order**. It is implemented but was never executed against Starbucks in this work. It checks quote expiry, the signed-in account, and the current wallet payment/balance before making one submission attempt. There is no automatic reprice, retry, card reload, or payment creation. The SDK requires both `HttpTransport({allowOrderSubmission:true})` and `submitOrder(request, {confirm:true})`; generic `operation("submit-order")` remains blocked.
+`order submit --file <prepared-file> --confirm` **places a real order**. It is implemented but was never executed against Starbucks in this work. It checks quote expiry, the signed-in account, and the current wallet payment/balance before making one submission attempt. There is no automatic reprice, retry, card reload, or payment creation. The SDK requires both `new FetchStarbucksClient({allowOrderSubmission:true})` and `submitOrder(request, {confirm:true})`; generic `operation("submit-order")` remains blocked.
 
 The CLI writes a private, exclusive journal at `.starbucks/order-attempts/<orderId>.json` before the request, preventing duplicate attempts from the same workspace, including copied draft files. It saves acceptance before the follow-up status read. A failed status read reports acceptance with status unavailable. If submission times out or cannot be confirmed, retain the order ID and reconcile status/history; do not delete the journal to retry. The SDK prevents repeated attempts for an order ID within a client instance; other SDK applications must persist their own attempt record.
 
@@ -97,14 +97,16 @@ The pickup endpoint supplies a timestamp and wait estimates. It does **not** est
 
 ```ts
 import {
-  HttpTransport,
-  StarbucksClient,
+  FetchStarbucksClient,
+  FileSessionStore,
   prepareOrder,
   buildSubmissionRequest,
   summarizePreparedOrder,
 } from "starbucks-web-sdk";
 
-const client = new StarbucksClient(new HttpTransport({ cookieJar }));
+const client = new FetchStarbucksClient({
+  session: new FileSessionStore(".starbucks/http-fetch-session.json"),
+});
 try {
   const prepared = await prepareOrder(client, cart);
   console.log(summarizePreparedOrder(prepared));

@@ -1,7 +1,8 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
-import { HttpTransport, StarbucksClient } from "../src/client.ts";
-import { allowedRequest } from "../src/safety.ts";
+import { CookieJar } from "tough-cookie";
+import { FetchStarbucksClient, MemorySessionStore } from "../dist/index.js";
+import { allowedRequest } from "../dist/fetch/policy.js";
 
 const page = (offset, returned, total = 121) => ({
   paging: { offset, limit: 50, returned, total },
@@ -19,14 +20,13 @@ const page = (offset, returned, total = 121) => ({
 
 test("history encodes the captured operation and pagination variables", async () => {
   const calls = [];
-  const client = new StarbucksClient(
-    new HttpTransport({
-      fetch: async (url, init) => {
-        calls.push({ url: String(url), ...init });
-        return Response.json({ data: { transactionHistoryV2: page(0, 50) } });
-      },
-    }),
-  );
+  const client = new FetchStarbucksClient({
+    session: new MemorySessionStore(new CookieJar()),
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), ...init });
+      return Response.json({ data: { transactionHistoryV2: page(0, 50) } });
+    },
+  });
   const result = await client.transactionHistory();
   assert.equal(calls.length, 1);
   assert.equal(
@@ -42,14 +42,18 @@ test("history encodes the captured operation and pagination variables", async ()
 
 test("history pages advance by paging.returned, not the number of visible records", async () => {
   const offsets = [];
-  const client = new StarbucksClient({
-    request: async (path, body) => {
-      assert.equal(path, "/apiproxy/v1/orchestra/get-transaction-history");
-      const offset = body.variables.offset;
-      offsets.push(offset);
-      return {
-        data: { transactionHistoryV2: page(offset, offset === 100 ? 21 : 50) },
-      };
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async (path, body) => {
+        assert.equal(path, "/apiproxy/v1/orchestra/get-transaction-history");
+        const offset = body.variables.offset;
+        offsets.push(offset);
+        return {
+          data: {
+            transactionHistoryV2: page(offset, offset === 100 ? 21 : 50),
+          },
+        };
+      },
     },
   });
   const received = [];
@@ -62,10 +66,12 @@ test("history pages advance by paging.returned, not the number of visible record
 
 test("invalid pagination is rejected locally and non-advancing responses cannot loop", async () => {
   let calls = 0;
-  const client = new StarbucksClient({
-    request: async () => {
-      calls++;
-      return { data: { transactionHistoryV2: page(0, 0) } };
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async () => {
+        calls++;
+        return { data: { transactionHistoryV2: page(0, 0) } };
+      },
     },
   });
   for (const options of [
@@ -86,10 +92,12 @@ test("invalid pagination is rejected locally and non-advancing responses cannot 
 });
 
 test("history response and receipt availability are checked", async () => {
-  const client = new StarbucksClient({
-    request: async () => ({
-      data: { transactionHistoryV2: null, activity: null },
-    }),
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async () => ({
+        data: { transactionHistoryV2: null, activity: null },
+      }),
+    },
   });
   await assert.rejects(client.transactionHistory(), /history/i);
   await assert.rejects(client.historyReceipt("fixture-id"), /receipt/i);
@@ -98,13 +106,15 @@ test("history response and receipt availability are checked", async () => {
 
 test("related receipt and eGift reads use their distinct captured-bundle request contracts", async () => {
   const calls = [];
-  const client = new StarbucksClient({
-    request: async (path, body) => {
-      calls.push({ path, body });
-      if (path.endsWith("get-history-item-receipt"))
-        return { data: { activity: { receipt: { purchasedItems: [] } } } };
-      if (path.endsWith("order-list")) return { orders: [] };
-      return { purchaseStatus: "complete" };
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async (path, body) => {
+        calls.push({ path, body });
+        if (path.endsWith("get-history-item-receipt"))
+          return { data: { activity: { receipt: { purchasedItems: [] } } } };
+        if (path.endsWith("order-list")) return { orders: [] };
+        return { purchaseStatus: "complete" };
+      },
     },
   });
   await client.historyReceipt("fixture-history");

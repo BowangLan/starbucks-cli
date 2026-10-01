@@ -1,4 +1,4 @@
-Account history and receipts work with the session produced by `bun run auth:fetch`. The history command uses native Node fetch, the saved cookie jar, and the SDK's read endpoints.
+Account history and receipts work with the session produced by `bun run starbucks login`. The history command uses native Node fetch, the saved cookie jar, and the SDK's read endpoints.
 
 ```sh
 # Load every available page, saving the full result with mode 0600.

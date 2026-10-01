@@ -1,6 +1,8 @@
 # SDK, CLI, and Starbucks API reference
 
-This documents the fetch-based SDK and CLI. The [order-flow reference](order-flow.md) documents the full member checkout, submission, status APIs, and fresh risk-context runner. Source: [CLI](../src/cli.ts), [client/transport](../src/client.ts), [cart helpers](../src/cart.ts), [types](../src/types.ts), and [endpoint allowlist](../src/safety.ts).
+This documents the fetch-based SDK and CLI. The [order-flow reference](order-flow.md) documents the full member checkout, submission, status APIs, and fresh risk-context runner. Source: [CLI](../src/cli.ts), [client interface](../src/client.ts), [fetch client](../src/fetch/client.ts), [cart helpers](../src/cart.ts), [types](../src/types.ts), and [allowlists](../src/fetch/policy.ts).
+
+Layers: domain modules (`types`, `cart`, `order`, `order-validation`, `preflight`) make no network calls. `StarbucksClient` ([src/client.ts](../src/client.ts)) is the interface the CLI and domain code use. `FetchStarbucksClient` ([src/fetch/](../src/fetch/)) implements it: session store, sign-in, transport, allowlists, and the jsdom runner for protection scripts.
 
 API endpoint paths below use **`https://www.starbucks.com`**. Login also uses **`https://auth.starbucks.com`**. API operations use standard `fetch`. No browser is used.
 
@@ -10,27 +12,28 @@ API endpoint paths below use **`https://www.starbucks.com`**. Login also uses **
 
 Run commands with `bun run starbucks <command>`. Angle brackets indicate required values; square brackets indicate optional arguments.
 
-Order commands need only the cookie jar saved by `auth:fetch` (plus the user's cart). Protected requests generate context from current website scripts; no capture or imported header file is read. Device risk is generated automatically when building or submitting the order; `--risk-file` remains an optional diagnostic override. See [order preparation](order-flow.md).
+Order commands need only the cookie jar saved by `starbucks login` (plus the user's cart). Protected requests generate context from current website scripts; no capture or imported header file is read. Device risk is generated automatically when building or submitting the order; `--risk-file` remains an optional diagnostic override. See [order preparation](order-flow.md).
 
-| CLI command                                                                       | SDK calls                                 | Starbucks HTTP request                                                                                                                   | Local behavior / output                                                                                                                                                                    |
-| --------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `stores --place <place> [--lat <n> --lng <n>]`                                    | `stores(place, coordinates?)`             | `GET /apiproxy/v1/locations?place=…&lat=…&lng=…`                                                                                         | Prints store number, name, address, distance, open status, and mobile-ordering status. Both coordinates must be supplied together or omitted.                                              |
-| `menu [--search <term>]`                                                          | `menu()` or `searchMenu(term)`            | `GET /apiproxy/v1/ordering/menu`                                                                                                         | Full menu, or locally filtered products. Search does **not** use a search endpoint.                                                                                                        |
-| `product <id> [--form <form>] [--options]`                                        | `product(id, form)`                       | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Prints one product; `--options` projects its sizes and nested customization choices. Form defaults to `hot`.                                                                               |
-| `auth status`                                                                     | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Reads HTTP session file; requires nonempty `data.user.exId`. Prints `{authenticated:true, session}` only on success; otherwise exits with an error.                                        |
-| `whoami`                                                                          | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Prints the signed-in user profile (`data.user`) as JSON. Uses the default session or `--session <file>`; fails if the account is not authenticated.                                        |
-| `auth import --file <file>`                                                       | `importCookieJar()` → `user()`            | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Accepts serialized `tough-cookie` JSON, storage-state objects, or cookie arrays. Verifies consumer authentication before saving the jar to `--session`. Does not perform login.            |
-| `cards`                                                                           | `cards()`                                 | `POST /apiproxy/v1/orchestra/get-stored-value-card-list`                                                                                 | Prints nickname, last four digits, primary flag, and balance; omits full card number.                                                                                                      |
-| `wallet`                                                                          | `wallet()`                                | `POST /apiproxy/v1/orchestra/get-starpay-wallet`                                                                                         | Prints payment type, last four digits, default/status, and stored-value-card count. Does not select a payment instrument.                                                                  |
-| `store --place <place> --name <name> --lat <n> --lng <n>`                         | `stores(place, coordinates)`              | `GET /apiproxy/v1/locations?place=…&lat=…&lng=…`                                                                                         | Case-insensitive exact name match; requires `mobileOrdering.availability === "READY"`. Saves full store number in local cart. No store-selection API write.                                |
-| `cart show`                                                                       | Local file read / `createCart()`          | **None**                                                                                                                                 | Prints the local cart. Missing file yields an empty cart with no store selected.                                                                                                           |
-| `cart add --product <id> [customization flags]`                                   | `product()`, `createItem()`, `addItem()`  | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Fetches product configuration, then adds/merges an item in local cart. No server cart-add API.                                                                                             |
-| `cart decrease <index>`                                                           | `decreaseItem(cart, index)`               | **None**                                                                                                                                 | Zero-based index; subtracts one and removes the item when quantity reaches zero. Saves local cart.                                                                                         |
-| `cart build --product <id> --store <number> [customization flags] [--out <file>]` | `product()`, `createItem()`, `toOrder()`  | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Creates and validates a separate single-item draft. Default output `.starbucks/draft-cart.json`; does not update `--cart` unless explicitly given the same output path.                    |
-| `cart quote [--file <file>] [--guest]`                                            | `quote(cart, mode)`                       | Member: `POST /apiproxy/v1/orchestra/price-order`; guest: `POST /apiproxy/v1/orchestra/price-order-guest`                                | Reads `--file` or current local cart. Prints quote and writes `.starbucks/latest-quote.json`. Both modes use the HTTP session file.                                                        |
-| `cart preflight`                                                                  | `user()` → `quote(cart)` → `wallet()`     | Sequential POSTs: `/apiproxy/v1/orchestra/get-user` → `/apiproxy/v1/orchestra/price-order` → `/apiproxy/v1/orchestra/get-starpay-wallet` | Stops on first failure. Returns `checks`, `checksPassed`, and `orderSubmitted:false`; later checks are marked skipped. Does not verify final checkout acceptance or open a payment screen. |
-| `order review/build-submit/payments/submit/status/previous`                       | See [order-flow reference](order-flow.md) | Captured checkout and status APIs                                                                                                        | Review stops before submission; build-submit only creates the local payload; submit requires explicit opt-in.                                                                              |
-| `help [command]`, `--help`, `--version`                                           | None                                      | **None**                                                                                                                                 | Commander-generated usage/version output.                                                                                                                                                  |
+| CLI command                                                                       | SDK calls                                 | Starbucks HTTP request                                                                                                                   | Local behavior / output                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------- | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stores --place <place> [--lat <n> --lng <n>]`                                    | `stores(place, coordinates?)`             | `GET /apiproxy/v1/locations?place=…&lat=…&lng=…`                                                                                         | Prints store number, name, address, distance, open status, and mobile-ordering status. Both coordinates must be supplied together or omitted.                                                                                           |
+| `menu [--search <term>]`                                                          | `menu()` or `searchMenu(term)`            | `GET /apiproxy/v1/ordering/menu`                                                                                                         | Full menu, or locally filtered products. Search does **not** use a search endpoint.                                                                                                                                                     |
+| `product <id> [--form <form>] [--options]`                                        | `product(id, form)`                       | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Prints one product; `--options` projects its sizes and nested customization choices. Form defaults to `hot`.                                                                                                                            |
+| `auth status`                                                                     | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Reads HTTP session file; requires nonempty `data.user.exId`. Prints `{authenticated:true, session}` only on success; otherwise exits with an error.                                                                                     |
+| `whoami`                                                                          | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Prints the signed-in user profile (`data.user`) as JSON. Uses the default session or `--session <file>`; fails if the account is not authenticated.                                                                                     |
+| `auth import --file <file>`                                                       | `importSession(input)`                    | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Accepts serialized `tough-cookie` JSON, storage-state objects, or cookie arrays. Verifies consumer authentication before saving the jar to `--session`. Does not perform login.                                                         |
+| `login [--prepare-only] [--verbose]`                                              | `login(credentials, options)`             | Sign-in page and vendor scripts (jsdom) → authorization → login form → callback → `get-user`                                             | Reads `STARBUCKS_USERNAME`/`STARBUCKS_PASSWORD` (`bun run starbucks` loads `.env`). Sends credentials once; `--prepare-only` stops before that. Saves the session only after account verification. May fail after an IP address change. |
+| `cards`                                                                           | `cards()`                                 | `POST /apiproxy/v1/orchestra/get-stored-value-card-list`                                                                                 | Prints nickname, last four digits, primary flag, and balance; omits full card number.                                                                                                                                                   |
+| `wallet`                                                                          | `wallet()`                                | `POST /apiproxy/v1/orchestra/get-starpay-wallet`                                                                                         | Prints payment type, last four digits, default/status, and stored-value-card count. Does not select a payment instrument.                                                                                                               |
+| `store --place <place> --name <name> --lat <n> --lng <n>`                         | `stores(place, coordinates)`              | `GET /apiproxy/v1/locations?place=…&lat=…&lng=…`                                                                                         | Case-insensitive exact name match; requires `mobileOrdering.availability === "READY"`. Saves full store number in local cart. No store-selection API write.                                                                             |
+| `cart show`                                                                       | Local file read / `createCart()`          | **None**                                                                                                                                 | Prints the local cart. Missing file yields an empty cart with no store selected.                                                                                                                                                        |
+| `cart add --product <id> [customization flags]`                                   | `product()`, `createItem()`, `addItem()`  | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Fetches product configuration, then adds/merges an item in local cart. No server cart-add API.                                                                                                                                          |
+| `cart decrease <index>`                                                           | `decreaseItem(cart, index)`               | **None**                                                                                                                                 | Zero-based index; subtracts one and removes the item when quantity reaches zero. Saves local cart.                                                                                                                                      |
+| `cart build --product <id> --store <number> [customization flags] [--out <file>]` | `product()`, `createItem()`, `toOrder()`  | `GET /apiproxy/v1/ordering/{id}/{form}`                                                                                                  | Creates and validates a separate single-item draft. Default output `.starbucks/draft-cart.json`; does not update `--cart` unless explicitly given the same output path.                                                                 |
+| `cart quote [--file <file>] [--guest]`                                            | `quote(cart, mode)`                       | Member: `POST /apiproxy/v1/orchestra/price-order`; guest: `POST /apiproxy/v1/orchestra/price-order-guest`                                | Reads `--file` or current local cart. Prints quote and writes `.starbucks/latest-quote.json`. Both modes use the HTTP session file.                                                                                                     |
+| `cart preflight`                                                                  | `user()` → `quote(cart)` → `wallet()`     | Sequential POSTs: `/apiproxy/v1/orchestra/get-user` → `/apiproxy/v1/orchestra/price-order` → `/apiproxy/v1/orchestra/get-starpay-wallet` | Stops on first failure. Returns `checks`, `checksPassed`, and `orderSubmitted:false`; later checks are marked skipped. Does not verify final checkout acceptance or open a payment screen.                                              |
+| `order review/build-submit/payments/submit/status/previous`                       | See [order-flow reference](order-flow.md) | Captured checkout and status APIs                                                                                                        | Review stops before submission; build-submit only creates the local payload; submit requires explicit opt-in.                                                                                                                           |
+| `help [command]`, `--help`, `--version`                                           | None                                      | **None**                                                                                                                                 | Commander-generated usage/version output.                                                                                                                                                                                               |
 
 ### Global options and local files
 
@@ -47,7 +50,7 @@ bun run starbucks --session .starbucks/my-http-session.json --cart .starbucks/my
 | `-h, --help`       | —                                    | Displays help.                                                                                                                                 |
 | `-V, --version`    | —                                    | Displays package CLI version.                                                                                                                  |
 
-Session cookies, including response `Set-Cookie` updates, are saved after session-backed commands, even when the request fails. `auth:fetch` and `auth import` only replace the destination after successful verification. Session/cart JSON writes are atomic with file mode 0600. Saved session files are HTTP cookie jars; storage-state imports are converted locally.
+Session cookies, including response `Set-Cookie` updates, are saved after session-backed commands, even when the request fails. `login` and `auth import` only replace the destination after successful verification. Session/cart JSON writes are atomic with file mode 0600. Saved session files are HTTP cookie jars; storage-state imports are converted locally.
 
 ### Cart customization flags
 
@@ -68,18 +71,17 @@ These flags apply to **both** `cart add` and `cart build`:
 
 Import from the package root (or `./dist/index.js` inside this checkout). The complete exports are [src/index.ts](../src/index.ts).
 
-### Authentication functions
+### Fetch login and sessions
 
-#### Experimental fetch-only login
+Source: [src/fetch/login.ts](../src/fetch/login.ts) (protection scripts in jsdom), [src/fetch/login-flow.ts](../src/fetch/login-flow.ts) (redirects and form), [src/fetch/session.ts](../src/fetch/session.ts) (stores and cookie import).
 
-Source: [src/auth.ts](../src/auth.ts). These are exported standalone functions.
-
-| Function / type                                                | Behavior                                                                                                                                                                                                                                        |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `login(credentials: LoginCredentials, options?: LoginOptions)` | Returns `Promise<StarbucksClient>` only after the flow below and successful `get-user`. No automatic retry, script execution, fingerprint generation, or browser fallback.                                                                      |
-| `LoginCredentials`                                             | Required `username` and `password` strings. SDK takes explicit values; the CLI does not use this function or read environment credentials.                                                                                                      |
-| `LoginOptions`                                                 | `cookieJar`, injectable `fetch`, `timeoutMs` (25000), and `staySignedIn` (true). SDK callers may supply an existing jar.                                                                                                                        |
-| `importCookieJar(input: unknown)`                              | Returns `Promise<CookieJar>`. Accepts a serialized jar, storage-state `{cookies: [...]}`, or cookie array. Browser-style imports preserve domain/host-only/path/expiry/security attributes and exclude non-Starbucks domains. No network calls. |
+| Method / type                                                         | Behavior                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `client.login(credentials: LoginCredentials, options?: LoginOptions)` | Runs the current vendor, Iovation, and Accertify scripts in jsdom, then the flow below, then verifies `get-user`. On success the client adopts the new cookies and saves them to its store; a failure leaves the saved session untouched. Returns `{ authenticated, traceFile? }`. |
+| `LoginOptions`                                                        | `prepareOnly` (stop before sending credentials), `staySignedIn` (true), `stateDir` (cooldown file and redacted trace; omit to write nothing), `onProgress`, `onDiagnostic`.                                                                                                        |
+| `client.importSession(input: unknown)`                                | Converts with `importCookieJar`, verifies `get-user`, then replaces the saved session.                                                                                                                                                                                             |
+| `importCookieJar(input: unknown)`                                     | Returns `Promise<CookieJar>`. Accepts a serialized jar, storage-state `{cookies: [...]}`, or cookie array. Browser-style imports preserve domain/host-only/path/expiry/security attributes and exclude non-Starbucks domains. No network calls.                                    |
+| `FileSessionStore(file)`, `MemorySessionStore(jar?)`                  | `SessionStore` implementations: `load()` returns the jar or `undefined` for no session; `save(jar)` writes atomically with mode 0600 (file store).                                                                                                                                 |
 
 Login requests:
 
@@ -91,13 +93,24 @@ Login requests:
 6. Follow allowlisted redirects through `/authorize/resume` and `www.starbucks.com/apiproxy/v1/oauth-callback?code=...&state=...`; callback state must equal the original authorization state.
 7. Reach the Starbucks post-sign-in page and verify `POST /apiproxy/v1/orchestra/get-user`.
 
-Cookies are processed on every response and scoped to each destination. Redirects never forward the credential body. Unexpected destinations, form/state changes, unsupported challenges, HTTP errors, and redirect limits terminate the flow. A returned login form does not trigger another credential submission. The experimental function does not write session files.
+Cookies are processed on every response and scoped to each destination. Redirects never forward the credential body. Unexpected destinations, form/state changes, unsupported challenges, HTTP errors, and redirect limits terminate the flow. A returned login form does not trigger another credential submission. With `stateDir`, a cooldown file enforces at least 60 seconds between credential attempts and honors longer `Retry-After` values.
 
-**Limitation:** this implements the HTTP transaction, not browser fingerprint/protection generation. Mock tests verify orchestration, not acceptance by Starbucks. The working imported-session path is not credential-only login.
+**Limitation:** Starbucks may reject the fetch login after the machine switches to a different IP address. Mock tests cover the redirect flow; live acceptance depends on the server. `auth import --file <file>` accepts cookies exported from a signed-in browser session instead.
 
-### `StarbucksClient`
+### `StarbucksClient` and `FetchStarbucksClient`
 
-`new StarbucksClient(transport?: Transport)` defaults to `new HttpTransport()` with an empty cookie jar. `client.transport` is readable. The client itself does not read `.env`, session files, or cart files.
+`StarbucksClient` is an interface. `new FetchStarbucksClient(options?)` implements it:
+
+```ts
+new FetchStarbucksClient({
+  session: new FileSessionStore(file), // optional; defaults to an in-memory store with no session
+  fetch: customFetch, // optional; defaults to globalThis.fetch
+  timeoutMs: 25000, // optional; default 25 seconds
+  allowOrderSubmission: false, // default; only explicitly enable for a real purchase
+});
+```
+
+The client loads cookies from the store on first use and saves refreshed cookies in `close()`. Browsing methods (`menu`, `searchMenu`, `product`, `stores`, `pickupEstimate`) work without a session. Account and ordering methods throw `NotSignedInError` (`code: "NOT_SIGNED_IN"`) before any request when the store has no session. `hasSession()` reports which applies. The client does not read `.env` or cart files.
 
 | Method                                                          | Return                             | Endpoint / behavior                                                                                                                                                               |
 | --------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -167,23 +180,16 @@ Each entry is a **POST** to `/apiproxy/v1/orchestra/{name}` through `operation(n
 | `reward-programs`            | `rewardPrograms()`                   | Part of `order review`                            |
 | `get-previous-orders`        | `previousOrders(storeNumber, limit)` | `order previous`                                  |
 
-### `HttpTransport`
+### HTTP behavior
 
-```ts
-new HttpTransport({
-  cookieJar, // optional tough-cookie CookieJar; defaults to empty
-  fetch: customFetch, // optional; defaults to globalThis.fetch
-  timeoutMs: 25000, // optional; default 25 seconds
-  allowOrderSubmission: false, // default; only explicitly enable for a real purchase
-});
-```
+The fetch client sends every API call through an internal `HttpTransport` ([src/fetch/transport.ts](../src/fetch/transport.ts)); it is not part of the public SDK.
 
-- `request(path: string, body?: unknown): Promise<unknown>`: GET when body is `undefined`; otherwise POST with JSON serialization. Paths are restricted to the Starbucks origin and the allowlist.
-- `cookieJar`: readable jar; handles domain/path/expiry and retains `Set-Cookie` responses. SDK callers persist it themselves if needed.
+- GET when there is no body; otherwise POST with JSON serialization. Paths are restricted to the Starbucks origin and the allowlist.
+- The cookie jar handles domain/path/expiry and retains `Set-Cookie` responses; the client persists it through its session store.
 - Common headers: `accept: application/json`, `x-requested-with: XMLHttpRequest`, and matching cookies when available. POST additionally sets `content-type: application/json`, Starbucks `origin`, and `/menu/cart` referer.
 - Redirects are rejected. There are no automatic retries or browser fallbacks.
-- In addition to the named client methods, `request("/apiproxy/v1/ordering/pre-order-pickup-estimate/{shortStoreNumber}")` is allowlisted as GET. It is wrapped by `pickupEstimate(fullStoreNumber)` and `cart pickup`, returning `PickupEstimate`.
-- Raw `request` callers pass the complete body, including `{variables: …}` when needed. `operation` wraps variables for them.
+- `GET /apiproxy/v1/ordering/pre-order-pickup-estimate/{shortStoreNumber}` is wrapped by `pickupEstimate(fullStoreNumber)` and `cart pickup`, returning `PickupEstimate`.
+- `operation(name, variables)` (on `FetchStarbucksClient`) wraps variables as `{variables: …}`.
 
 ### Local cart helpers — no API calls
 
@@ -197,9 +203,9 @@ new HttpTransport({
 
 ### Errors and exported types
 
-`StarbucksError(message, status?)` extends `Error` and exposes optional HTTP `status`. Exported `parseResponse(status, body)` parses JSON, rejecting non-2xx, non-JSON, and nonempty top-level GraphQL `errors`. Validation errors and underlying fetch/timeout failures may be ordinary errors, not `StarbucksError`.
+`StarbucksError(message, status?, code?)` extends `Error` and exposes optional HTTP `status`. Subclasses: `NotSignedInError`, `LoginError` (with optional `traceFile`), and `OrderSubmissionDisabledError`. Exported `parseResponse(status, body)` parses JSON, rejecting non-2xx, non-JSON, and nonempty top-level GraphQL `errors`. Validation errors and underlying fetch/timeout failures may be ordinary errors, not `StarbucksError`.
 
-Public TypeScript interfaces: `Transport`, `HttpTransportOptions`, `Customization`, `MenuProduct`, `MenuCategory`, `Menu`, `OptionSize`, `ProductOption`, `OptionCategory`, `RecipeOption`, `ProductSize`, `Product`, `Store`, `StoreLocation`, `Modifier`, `CartItem`, `Cart`, `OrderInput`, and `PriceQuote`. They describe the implemented subset, not complete Starbucks response schemas.
+Public TypeScript interfaces: `StarbucksClient`, `FetchClientOptions`, `SessionStore`, `LoginCredentials`, `LoginOptions`, `LoginResult`, `Customization`, `MenuProduct`, `MenuCategory`, `Menu`, `OptionSize`, `ProductOption`, `OptionCategory`, `RecipeOption`, `ProductSize`, `Product`, `Store`, `StoreLocation`, `Modifier`, `CartItem`, `Cart`, `OrderInput`, and `PriceQuote`. They describe the implemented subset, not complete Starbucks response schemas.
 
 ## Examples
 
@@ -207,13 +213,13 @@ Public SDK call:
 
 ```ts
 import {
-  StarbucksClient,
+  FetchStarbucksClient,
   createCart,
   createItem,
   addItem,
 } from "./dist/index.js";
 
-const api = new StarbucksClient();
+const api = new FetchStarbucksClient();
 const product = await api.product(407, "hot");
 const cart = addItem(
   createCart("114-101752"),
@@ -225,17 +231,20 @@ const cart = addItem(
 );
 ```
 
-HTTP-session SDK call (requires valid cookies; does not log in):
+Signed-in SDK call using the CLI's saved session:
 
 ```ts
-import { CookieJar } from "tough-cookie";
-import { StarbucksClient, HttpTransport } from "./dist/index.js";
+import { FetchStarbucksClient, FileSessionStore } from "./dist/index.js";
 
-const cookieJar = await CookieJar.deserialize(serializedJar);
-const api = new StarbucksClient(new HttpTransport({ cookieJar }));
-await api.user();
-const quote = await api.quote(cart);
-const updatedJar = await cookieJar.serialize();
+const api = new FetchStarbucksClient({
+  session: new FileSessionStore(".starbucks/http-fetch-session.json"),
+});
+try {
+  await api.user();
+  const quote = await api.quote(cart);
+} finally {
+  await api.close(); // saves refreshed cookies
+}
 ```
 
 CLI local-cart flow:
@@ -248,4 +257,4 @@ bun run starbucks cart show
 bun run starbucks cart quote
 ```
 
-No `session start`, `--headed`, card reload, or rewards application is implemented. Existing-wallet payment selection, preparation, explicitly enabled member submission, and pickup lookup are documented in the [order-flow reference](order-flow.md). The default transport rejects submission. The separate `bun run auth:fetch` runner has completed a live credential login with fresh script-generated context; see its [verification and limitations](fetch-login.md).
+No `session start`, `--headed`, card reload, or rewards application is implemented. Existing-wallet payment selection, preparation, explicitly enabled member submission, and pickup lookup are documented in the [order-flow reference](order-flow.md). The default transport rejects submission. `login` (`bun run starbucks login`) signs in with fetch; see its [verification and limitations](fetch-login.md).

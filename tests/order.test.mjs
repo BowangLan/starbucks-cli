@@ -1,9 +1,10 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
+import { CookieJar } from "tough-cookie";
 import {
-  StarbucksClient,
-  HttpTransport,
+  FetchStarbucksClient,
+  MemorySessionStore,
   createItem,
   toOrder,
   prepareOrder,
@@ -13,7 +14,7 @@ import {
   summarizePreparedOrder,
   validatePreparedOrder,
 } from "../dist/index.js";
-import { allowedRequest } from "../dist/safety.js";
+import { allowedRequest } from "../dist/fetch/policy.js";
 
 const fixture = JSON.parse(
   await fs.readFile(
@@ -55,28 +56,27 @@ const responses = {
 };
 function harness(overrides = {}, allowOrderSubmission = false) {
   const calls = [];
-  const client = new StarbucksClient(
-    new HttpTransport({
-      allowOrderSubmission,
-      sessionContextFactory: async () => ({
-        headers: async () => new Headers(),
-        risk: async () => risk,
-        close() {},
-      }),
-      fetch: async (url, init) => {
-        const endpoint = new URL(url).pathname;
-        const name = endpoint.split("/").at(-1);
-        calls.push({ endpoint, body: init.body && JSON.parse(init.body) });
-        const key = endpoint.includes("pickup-time") ? "pickup" : name;
-        if (overrides[key] instanceof Error) throw overrides[key];
-        const value =
-          overrides[key] ??
-          (key === "pickup" ? fixture.pickupResponse : responses[key]);
-        assert.ok(value, `Unexpected network request: ${endpoint}`);
-        return Response.json(value);
-      },
+  const client = new FetchStarbucksClient({
+    session: new MemorySessionStore(new CookieJar()),
+    allowOrderSubmission,
+    sessionContextFactory: async () => ({
+      headers: async () => new Headers(),
+      risk: async () => risk,
+      close() {},
     }),
-  );
+    fetch: async (url, init) => {
+      const endpoint = new URL(url).pathname;
+      const name = endpoint.split("/").at(-1);
+      calls.push({ endpoint, body: init.body && JSON.parse(init.body) });
+      const key = endpoint.includes("pickup-time") ? "pickup" : name;
+      if (overrides[key] instanceof Error) throw overrides[key];
+      const value =
+        overrides[key] ??
+        (key === "pickup" ? fixture.pickupResponse : responses[key]);
+      assert.ok(value, `Unexpected network request: ${endpoint}`);
+      return Response.json(value);
+    },
+  });
   return { client, calls };
 }
 const prepare = (client, options = {}) =>

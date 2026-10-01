@@ -2,7 +2,8 @@ import { test } from "bun:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import { CookieJar } from "tough-cookie";
-import { HttpTransport, StarbucksClient } from "../dist/index.js";
+import { FetchStarbucksClient, MemorySessionStore } from "../dist/index.js";
+import { HttpTransport } from "../dist/fetch/transport.js";
 
 test("authenticated requests use fetch, scope cookies, encode bodies, and retain Set-Cookie", async () => {
   const jar = new CookieJar();
@@ -16,22 +17,20 @@ test("authenticated requests use fetch, scope cookies, encode bodies, and retain
     "https://www.starbucks.com",
   );
   const calls = [];
-  const client = new StarbucksClient(
-    new HttpTransport({
-      cookieJar: jar,
-      fetch: async (url, init) => {
-        calls.push({ url: String(url), init });
-        return new Response(
-          JSON.stringify({ data: { user: { exId: "fixture" } } }),
-          {
-            headers: {
-              "set-cookie": "session=rotated; Secure; HttpOnly; Path=/",
-            },
+  const client = new FetchStarbucksClient({
+    session: new MemorySessionStore(jar),
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({ data: { user: { exId: "fixture" } } }),
+        {
+          headers: {
+            "set-cookie": "session=rotated; Secure; HttpOnly; Path=/",
           },
-        );
-      },
-    }),
-  );
+        },
+      );
+    },
+  });
   await client.user();
   assert.equal(
     calls[0].url,
@@ -55,7 +54,10 @@ test("public GET has no body and no session requirement", async () => {
       return Response.json({ menus: [] });
     },
   });
-  assert.deepEqual(await new StarbucksClient(transport).menu(), { menus: [] });
+  assert.deepEqual(
+    await new FetchStarbucksClient({ transport: transport }).menu(),
+    { menus: [] },
+  );
 });
 test("fetch never runs for disallowed destinations or order submission", async () => {
   let calls = 0;
@@ -98,7 +100,10 @@ test("no browser automation dependency, export, or import exists", async () => {
   for (const name of ["playwright", "puppeteer"])
     assert.equal(pkg.dependencies[name], undefined);
   assert.deepEqual(Object.keys(pkg.exports), ["."]);
-  for (const file of await fs.readdir(new URL("../src/", import.meta.url))) {
+  for (const file of await fs.readdir(new URL("../src/", import.meta.url), {
+    recursive: true,
+  })) {
+    if (!/\.(ts|mjs)$/.test(file)) continue;
     const text = await fs.readFile(
       new URL("../src/" + file, import.meta.url),
       "utf8",
@@ -113,19 +118,18 @@ test("no browser automation dependency, export, or import exists", async () => {
 });
 
 test("limited member authorization is surfaced as a sign-in requirement instead of generic 403", async () => {
-  const client = new StarbucksClient(
-    new HttpTransport({
-      fetch: async () =>
-        Response.json(
-          {
-            roleProvided: "user:limited",
-            roleRequired: "user",
-            type: "authorize-operation",
-          },
-          { status: 403 },
-        ),
-    }),
-  );
+  const client = new FetchStarbucksClient({
+    session: new MemorySessionStore(new CookieJar()),
+    fetch: async () =>
+      Response.json(
+        {
+          roleProvided: "user:limited",
+          roleRequired: "user",
+          type: "authorize-operation",
+        },
+        { status: 403 },
+      ),
+  });
   await assert.rejects(client.wallet(), (error) => {
     assert.equal(error.status, 403);
     assert.equal(error.code, "REAUTHENTICATION_REQUIRED");

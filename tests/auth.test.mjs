@@ -1,7 +1,17 @@
 import { test } from "bun:test";
 import assert from "node:assert/strict";
 import { CookieJar } from "tough-cookie";
-import { login, importCookieJar } from "../dist/index.js";
+import { importCookieJar } from "../dist/index.js";
+import { runLoginFlow } from "../dist/fetch/login-flow.js";
+import { HttpTransport, verifyAccount } from "../dist/fetch/transport.js";
+
+// The redirect/form flow plus the account check, as fetchLogin composes them.
+async function login(credentials, { fetch, cookieJar = new CookieJar() }) {
+  await runLoginFlow(credentials, { jar: cookieJar, fetch });
+  const transport = new HttpTransport({ cookieJar, fetch });
+  await verifyAccount(transport);
+  return transport;
+}
 const www = "https://www.starbucks.com",
   auth = "https://auth.starbucks.com";
 const authorize =
@@ -64,8 +74,11 @@ const credentials = {
 test("login uses fresh states, HTML decoding, scoped cookies, redirects, and account verification", async () => {
   const s = scenario(),
     jar = new CookieJar();
-  const client = await login(credentials, { fetch: s.fetch, cookieJar: jar });
-  assert.equal(client.transport.cookieJar, jar);
+  const transport = await login(credentials, {
+    fetch: s.fetch,
+    cookieJar: jar,
+  });
+  assert.equal(transport.cookieJar, jar);
   assert.equal(s.calls.length, 9);
   assert.equal(s.calls[1].body, undefined);
   assert.equal(s.calls[2].headers.cookie, undefined);

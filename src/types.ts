@@ -127,12 +127,6 @@ export interface PriceQuote {
     lineItems: Array<{ key: string; price: number; priceLabel: string }>;
   };
 }
-export interface Transport {
-  request(path: string, body?: unknown): Promise<unknown>;
-  orderRisk?(): Promise<OrderRisk>;
-  close?(): Promise<void>;
-}
-
 export interface HistoryOptions {
   offset?: number;
   /** The client supports the captured page size of up to 50 records. */

@@ -4,7 +4,7 @@ import {
   allowedContextRequest,
   allowedCheckoutContextRequest,
   retryNotBefore,
-} from "../scripts/fetch-policy.mjs";
+} from "../dist/fetch/policy.js";
 
 test("login context allowlist separates credential, registration, script, and read endpoints", () => {
   for (const [url, method] of [

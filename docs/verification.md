@@ -4,7 +4,7 @@ The CLI uses standard fetch for sign-in and all other operations. Order submissi
 
 ## Local checks
 
-Run `bun run test` to build the SDK/CLI and run the automated tests. Tests cover cart construction, request restrictions, cookie handling, and authentication transactions.
+Run `bun run test` to build the SDK/CLI and run the automated tests. Tests cover cart construction, request restrictions, cookie handling, authentication transactions, and session persistence.
 
 These tests use fixtures and synthetic responses. They do not establish live Starbucks API availability.
 
@@ -21,17 +21,17 @@ Session cookies can expire, and these observations are not reliability guarantee
 
 Observed on September 29, 2026 UTC:
 
-- The new `bun run auth:fetch` flow generated fresh context using the current page scripts and native Node fetch. Its single credential POST returned 302, OAuth completed, and authenticated `get-user` returned 200. See [fetch login verification](fetch-login.md).
+- The new `bun run starbucks login` flow generated fresh context using the current page scripts and native Node fetch. Its single credential POST returned 302, OAuth completed, and authenticated `get-user` returned 200. See [fetch login verification](fetch-login.md).
 - The resulting session loaded all three transaction-history pages with HTTP 200, returning 114 unique visible entries. A purchase receipt and the empty eGift order list also returned 200. See [history contracts and verification](history.md).
 - The missing `src/preflight.ts` module has been restored. The full SDK/CLI build succeeds, and `auth status` verifies the fetch-login session. Regression tests exercise the built CLI's startup and account verification.
 
 ## Current session-only implementation
 
-The runtime capture importer, header-file option, and automatic header-file loading have been removed. CLI/client protected requests now use the cookie jar saved by `auth:fetch` and scripts fetched from the current website. Device risk is generated automatically; no risk file is required. The CLI runs under Node 24.21+ because Bun cannot execute the vendor runtime reliably.
+The runtime capture importer, header-file option, and automatic header-file loading have been removed. CLI/client protected requests now use the cookie jar saved by `starbucks login` and scripts fetched from the current website. Device risk is generated automatically; no risk file is required. The CLI runs under Node 24.21+ because Bun cannot execute the vendor runtime reliably.
 
 Local tests cover ignoring obsolete dump-derived files, generating fresh context using synthetic website scripts, Request-object handling, isolating context requests from order APIs, rejecting incomplete proof, and the full order flow with mock submission/status. Offline vendor-script experiments generated the six core form-proof fields; the optional `a0` field was not generated.
 
-Observed October 1, 2026 UTC using the session freshly saved by `auth:fetch`:
+Observed October 1, 2026 UTC using the session freshly saved by `starbucks login`:
 
 - The read-only wallet and pricing probe passed. Both APIs returned HTTP 200, and pricing returned a USD 9.70 quote for the saved cart at store `17011-170949` with a 300-second lifetime.
 - `order review` passed its account, store/availability, menu, wallet, rewards, pickup-estimate, and pricing checks. It selected the wallet's default PayPal tender and reported a $9.70 total with no tip.
@@ -55,7 +55,7 @@ See the [order-flow guide](order-flow.md) for command usage and the [403/429 inv
 
 ```sh
 bun run test
-bun run auth:fetch
+bun run starbucks login
 bun run starbucks auth status
 bun run starbucks cart show
 bun run starbucks cart quote

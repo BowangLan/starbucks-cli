@@ -1,4 +1,4 @@
-import { StarbucksError } from "./client.js";
+import { StarbucksError } from "./errors.js";
 import type { StarbucksClient } from "./client.js";
 import type { Cart, PreflightCheck, PreflightReport } from "./types.js";
 

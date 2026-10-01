@@ -20,16 +20,14 @@
     }
   },
   "scripts": {
-    "order:audit-capture": "node scripts/audit-order-capture.mjs",
-    "auth:fetch": "bun build scripts/fetch-login.mjs --target=node --packages=external --outfile=.starbucks/fetch-login.mjs > /dev/null && node --env-file=.env .starbucks/fetch-login.mjs",
     "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs tests/fetch-session-context.test.mjs",
     "test:history": "bun test tests/history.test.mjs",
     "build": "bun -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && bun --bun tsc",
     "test": "bun run build && bun test ./tests --path-ignore-patterns '**/fetch-*.test.mjs' && bun run test:fetch",
-    "starbucks": "node dist/cli.js",
+    "starbucks": "node --env-file-if-exists=.env dist/cli.js",
     "format": "oxfmt --write .",
-    "lint": "oxlint --deny-warnings src tests scripts",
-    "lint:fix": "oxlint --fix --deny-warnings src tests scripts",
+    "lint": "oxlint --deny-warnings src tests",
+    "lint:fix": "oxlint --fix --deny-warnings src tests",
     "format:check": "oxfmt --check .",
     "check": "bun run lint && bun run format:check && bun run test"
   },

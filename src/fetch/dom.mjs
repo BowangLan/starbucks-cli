@@ -4,7 +4,7 @@ import {
   installDatadog,
   installGraphics,
   installWebSocket,
-} from "./fetch-emulation.mjs";
+} from "./emulation.mjs";
 
 export const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

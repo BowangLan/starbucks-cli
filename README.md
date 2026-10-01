@@ -2,15 +2,15 @@
 
 **[Complete SDK + CLI reference and Starbucks endpoint mapping](docs/reference.md)** — every command, SDK method, flag, request body, and implementation limitation.
 
-An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/menu/cart/account API operations use standard `fetch`. Sign-in (`bun run auth:fetch`) also uses `fetch`, running the website's protection scripts in jsdom; no browser is launched. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
+An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/menu/cart/account API operations use standard `fetch`. Sign-in (`starbucks login`) also uses `fetch`, running the website's protection scripts in jsdom; no browser is launched. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
 
 ```sh
 # .env contains STARBUCKS_USERNAME and STARBUCKS_PASSWORD
-bun run auth:fetch
+bun run starbucks login
 bun run starbucks auth status
 ```
 
-`auth:fetch` saves the verified cookie jar to `.starbucks/http-fetch-session.json`. Subsequent CLI commands use that session and fetch any fresh context they need from the current website. No dump import, request-header file, or manual context export is required.
+`starbucks login` saves the verified cookie jar to `.starbucks/http-fetch-session.json`. Subsequent CLI commands use that session and fetch any fresh context they need from the current website. No dump import, request-header file, or manual context export is required.
 
 The CLI/client use only the auth session for credentials. Pricing and submission prepare fresh protection using current website scripts; no network dump or imported header file is read. The live Palo Alto review and pricing check passed on October 1, 2026; submission itself remains untested against Starbucks. See [verification](docs/verification.md).
 
@@ -78,17 +78,19 @@ bun run starbucks cart quote --file .starbucks/draft-cart.json
 SDK example:
 
 ```ts
-import { CookieJar } from "tough-cookie";
 import {
-  StarbucksClient,
-  HttpTransport,
+  FetchStarbucksClient,
+  FileSessionStore,
   createCart,
   createItem,
   addItem,
 } from "./dist/index.js";
 
-const publicApi = new StarbucksClient();
-const product = await publicApi.product(407, "hot");
+// The client loads cookies from the store and saves refreshed ones on close().
+const client = new FetchStarbucksClient({
+  session: new FileSessionStore(".starbucks/http-fetch-session.json"),
+});
+const product = await client.product(407, "hot");
 const cart = addItem(
   createCart("114-101752"),
   createItem(product, {
@@ -98,23 +100,24 @@ const cart = addItem(
   }),
 );
 
-// Supply a previously obtained serialized HTTP jar; this is not a login flow.
-const jar = await CookieJar.deserialize(serializedCookieJar);
-const memberApi = new StarbucksClient(new HttpTransport({ cookieJar: jar }));
-const quote = await memberApi.quote(cart);
+// Account and pricing calls need a session: client.login(), importSession(), or a saved file.
+const quote = await client.quote(cart);
 console.log(quote.summary.priceLabel);
+await client.close();
 ```
 
-`HttpTransport` accepts an injectable fetch function and timeout. Its fixed-origin allowlist permits observed menu/store reads and read/quote operations, rejects payment mutations, and disallows API redirects. Member submission alone can be enabled with `allowOrderSubmission: true`; the CLI enables it only for `order submit --confirm`. The separate login function follows only allowlisted authentication redirects and validates callback state. Session/cart files are atomically saved with mode 0600. `.env` and `.starbucks/` remain ignored to keep local credentials and account data private.
+`StarbucksClient` is the interface; `FetchStarbucksClient` implements it with standard `fetch` and owns the cookie jar. It accepts a session store, an injectable fetch function, and a timeout. Its fixed-origin allowlist ([src/fetch/policy.ts](src/fetch/policy.ts)) permits observed menu/store reads and read/quote operations, rejects payment mutations, and disallows API redirects. Member submission alone can be enabled with `allowOrderSubmission: true`; the CLI enables it only for `order submit --confirm`. `client.login()` follows only allowlisted authentication redirects and validates callback state. Session/cart files are atomically saved with mode 0600. `.env` and `.starbucks/` remain ignored to keep local credentials and account data private.
 
-An experimental credential login now also works with native Node `fetch` and a JavaScript DOM, without launching a browser:
+Sign-in uses native Node `fetch` and a JavaScript DOM. It is `client.login(credentials)` in the SDK and `login` in the CLI:
 
 ```sh
 # .env: STARBUCKS_USERNAME and STARBUCKS_PASSWORD
-bun run auth:fetch
+bun run starbucks login
 ```
 
-It runs the current vendor, Iovation, and Accertify scripts, keeps their cookies and per-origin storage consistent, and submits credentials once. A verified session is saved to `.starbucks/http-fetch-session.json`; redacted diagnostics go under `.starbucks/fetch-login/`. Use `bun run auth:fetch --prepare-only` to check context generation without submitting credentials. Node 24.21+ and Bun are required. See [fetch login verification](docs/fetch-login.md) for the observed result and limitations.
+It can stop working after the machine switches to a different IP address. `auth import --file <file>` accepts cookies exported from a signed-in browser session instead.
+
+It runs the current vendor, Iovation, and Accertify scripts, keeps their cookies and per-origin storage consistent, and submits credentials once. A verified session is saved to `.starbucks/http-fetch-session.json`; redacted diagnostics go under `.starbucks/fetch-login/`. Use `bun run starbucks login --prepare-only` to check context generation without submitting credentials. Node 24.21+ and Bun are required. See [fetch login verification](docs/fetch-login.md) for the observed result and limitations.
 
 Read order/rewards history with that session:
 
@@ -128,7 +131,7 @@ History, receipt lookup, and eGift-history reads are implemented in the SDK. See
 Review checkout and build its submit payload without placing the order:
 
 ```sh
-bun run auth:fetch
+bun run starbucks login
 bun run starbucks order payments
 bun run starbucks order review
 bun run starbucks order build-submit

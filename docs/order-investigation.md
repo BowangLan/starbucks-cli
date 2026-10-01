@@ -1,6 +1,6 @@
 # Wallet 403 and pricing 429 investigation
 
-**Historical investigation:** the initial live successes below used captured header replay. That implementation was removed after the requirement was clarified: checkout must depend only on the credentials saved by `auth:fetch`. The replacement generates fresh context from current scripts, never reads a capture/header file, and passed live wallet, pricing, and checkout-review checks on October 1, 2026. No order has been submitted.
+**Historical investigation:** the initial live successes below used captured header replay. That implementation was removed after the requirement was clarified: checkout must depend only on the credentials saved by `starbucks login`. The replacement generates fresh context from current scripts, never reads a capture/header file, and passed live wallet, pricing, and checkout-review checks on October 1, 2026. No order has been submitted.
 
 ## Complete capture audit
 
@@ -13,19 +13,13 @@ Source: `network-dump-2026-09-29T02-09-20-076Z/tab-001/events.jsonl`, SHA-256 `e
 - Captured bundles `000059` (shared), `000061` (core), and `000367` (cart) establish reauthentication handling, device-risk construction, payment mapping, quote expiry in seconds, submission construction, and pickup lookup. `000047`/`000063` supply the request protection bootstrap/runtime.
 - The SDK's croissant pricing body exactly equals captured request `000392`. Both captured pricing requests and submission carry seven protection headers: `x-dq7hy5l1-a`, `-a0`, `-b`, `-c`, `-d`, `-f`, and `-z`. Wallet has none. The captured `-f` value equals the bootstrap initialization token.
 
-Reproduce the inventory without network access:
-
-```sh
-bun run order:audit-capture /path/to/network-dump-capture
-```
-
-The private report `.starbucks/order-capture-audit.json` contains request IDs, endpoint inventory, all JSON field paths and types, header/cookie names, and body hashes. It omits body and credential values.
+The capture audit script that produced this inventory has been removed; the findings below stand on their own.
 
 ## Wallet: full authorization had expired
 
 The 403 body was exactly the authorization failure with `roleProvided: user:limited`, `roleRequired: user`, and `type: authorize-operation`. The session lacked an active `.SbuxA0Auth` cookie while extended cookies still allowed profile reads. Adding a fresh device fingerprint did not fix authorization. The captured website handles this error by offering reauthentication.
 
-Running the existing `bun run auth:fetch` flow restored full authorization. The same wallet request then returned HTTP 200. The observed full-auth cookie lifetime was 20 minutes; extended profile access remained available longer. The SDK now exposes this failure as `StarbucksError.code === "REAUTHENTICATION_REQUIRED"` with an explicit sign-in instruction. Generic 403 responses remain generic errors.
+Running the existing `bun run starbucks login` flow restored full authorization. The same wallet request then returned HTTP 200. The observed full-auth cookie lifetime was 20 minutes; extended profile access remained available longer. The SDK now exposes this failure as `StarbucksError.code === "REAUTHENTICATION_REQUIRED"` with an explicit sign-in instruction. Generic 403 responses remain generic errors.
 
 ## Pricing: missing request protection and transport serialization
 
@@ -58,6 +52,6 @@ Private evidence: `.starbucks/order-probe.json` (failing baseline), `.starbucks/
 
 ## Replacement and current limits
 
-The SDK builds an ephemeral context from current website scripts and the auth cookie jar. It observes the vendor fetch hook locally and, if needed, uses the vendor form hook also used by `auth:fetch`. Form submission is intercepted locally. The core proof fields must be present and the bootstrap token must match the fresh script. Optional `a0` is preserved when available. Iovation/Accertify risk is generated automatically for request construction/submission. There is no proof-file cache or capture fallback.
+The SDK builds an ephemeral context from current website scripts and the auth cookie jar. It observes the vendor fetch hook locally and, if needed, uses the vendor form hook also used by `starbucks login`. Form submission is intercepted locally. The core proof fields must be present and the bootstrap token must match the fresh script. Optional `a0` is preserved when available. Iovation/Accertify risk is generated automatically for request construction/submission. There is no proof-file cache or capture fallback.
 
 On October 1, 2026, the replacement passed the live wallet and pricing probe and the full `order review` for the saved Palo Alto cart. Pricing returned a USD 9.70 quote with a 300-second lifetime, and `order build-submit` constructed the payload with zero order API calls. Submission acceptance and post-submit status remain mock-tested only; no real order was placed.

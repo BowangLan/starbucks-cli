@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CookieJar } from "tough-cookie";
-import { FetchDOM } from "../scripts/fetch-dom.mjs";
+import { FetchDOM } from "../dist/fetch/dom.mjs";
 
 test("fetch accepts Request objects without turning their URL into [object Request]", async () => {
   const calls = [];

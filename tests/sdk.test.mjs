@@ -7,10 +7,10 @@ import {
   createCart,
   addItem,
   decreaseItem,
-  StarbucksClient,
+  FetchStarbucksClient,
   parseResponse,
 } from "../dist/index.js";
-import { allowedRequest } from "../dist/safety.js";
+import { allowedRequest } from "../dist/fetch/policy.js";
 const load = async (name) =>
   JSON.parse(
     await fs.readFile(new URL("./fixtures/" + name, import.meta.url), "utf8"),
@@ -86,10 +86,12 @@ test("SDK guards reject every unapproved financial mutation", () => {
 });
 test("order submission cannot reach a transport through the client API", async () => {
   let calls = 0;
-  const client = new StarbucksClient({
-    request: async () => {
-      calls++;
-      return {};
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async () => {
+        calls++;
+        return {};
+      },
     },
   });
   await assert.rejects(client.operation("place-order"), /not permitted/);
@@ -108,8 +110,10 @@ test("HTTP and GraphQL errors cannot masquerade as successful data", () => {
 });
 
 test("anonymous user envelopes do not count as consumer sign-in", async () => {
-  const client = new StarbucksClient({
-    request: async () => ({ data: { user: {} } }),
+  const client = new FetchStarbucksClient({
+    transport: {
+      request: async () => ({ data: { user: {} } }),
+    },
   });
   await assert.rejects(client.user(), /sign-in is required/);
 });

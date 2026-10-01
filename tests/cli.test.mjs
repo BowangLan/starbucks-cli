@@ -9,13 +9,17 @@ import { CookieJar } from "tough-cookie";
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 
-test("built CLI starts and exposes auth commands", () => {
-  const result = spawnSync(process.execPath, [cli, "auth", "--help"], {
-    encoding: "utf8",
-  });
+test("built CLI starts and exposes login and auth commands", () => {
+  const help = (...args) =>
+    spawnSync(process.execPath, [cli, ...args, "--help"], {
+      encoding: "utf8",
+    });
+  let result = help();
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /^\s+login\b/m);
+  result = help("auth");
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /status/);
-  assert.match(result.stdout, /import/);
   assert.doesNotMatch(result.stdout, /login/);
 });
 

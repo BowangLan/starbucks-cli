@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { CookieJar } from "tough-cookie";
-import { LiveSessionContext } from "../dist/session-context.js";
-import { HttpTransport } from "../dist/client.js";
+import { LiveSessionContext } from "../dist/fetch/session-context.js";
+import { HttpTransport } from "../dist/fetch/transport.js";
 import { contextFixture } from "./fixtures/context-runtime.mjs";
 
 test("session context executes freshly fetched scripts, scopes cookies, and never sends an API during proof or risk generation", async () => {

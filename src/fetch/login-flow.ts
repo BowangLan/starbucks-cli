@@ -1,73 +1,15 @@
-import { Cookie, CookieJar } from "tough-cookie";
 import { parse } from "parse5";
 import type { DefaultTreeAdapterMap } from "parse5";
-import { HttpTransport, StarbucksClient, StarbucksError } from "./client.js";
-import type { HttpTransportOptions } from "./client.js";
-import { ORIGIN } from "./safety.js";
+import type { CookieJar } from "tough-cookie";
+import type { LoginCredentials } from "../client.js";
+import { StarbucksError } from "../errors.js";
+import { allowedLoginFlowRequest, AUTH_ORIGIN, ORIGIN } from "./policy.js";
 
-const AUTH_ORIGIN = "https://auth.starbucks.com";
-export interface LoginCredentials {
-  username: string;
-  password: string;
-}
-export interface LoginOptions extends HttpTransportOptions {
+export interface LoginFlowOptions {
+  jar: CookieJar;
+  fetch: typeof globalThis.fetch;
+  timeoutMs?: number;
   staySignedIn?: boolean;
-}
-
-/** Convert a cookie jar, storage-state object, or cookie export without executing browser code. */
-export async function importCookieJar(input: unknown): Promise<CookieJar> {
-  if (
-    input &&
-    typeof input === "object" &&
-    "version" in input &&
-    typeof input.version === "string" &&
-    input.version.startsWith("tough-cookie@")
-  ) {
-    return CookieJar.deserialize(
-      input as Parameters<typeof CookieJar.deserialize>[0],
-    );
-  }
-  const cookies = Array.isArray(input)
-    ? input
-    : input && typeof input === "object" && "cookies" in input
-      ? input.cookies
-      : undefined;
-  if (!Array.isArray(cookies))
-    throw new Error(
-      "Expected a cookie jar, storage-state object, or cookie array",
-    );
-  const jar = new CookieJar();
-  for (const c of cookies) {
-    if (!c || typeof c.domain !== "string")
-      throw new Error("Invalid cookie export");
-    const domain = c.domain.replace(/^\./, "");
-    if (domain !== "starbucks.com" && !domain.endsWith(".starbucks.com"))
-      continue;
-    if (
-      typeof c.name !== "string" ||
-      typeof c.value !== "string" ||
-      typeof c.path !== "string" ||
-      !c.path.startsWith("/")
-    )
-      throw new Error("Invalid cookie export");
-    const cookie = new Cookie({
-      key: c.name,
-      value: c.value,
-      domain,
-      path: c.path,
-      hostOnly: !c.domain.startsWith("."),
-      secure: !!c.secure,
-      httpOnly: !!c.httpOnly,
-      ...(typeof c.expires === "number" && c.expires > 0
-        ? { expires: new Date(c.expires * 1000) }
-        : {}),
-      ...(typeof c.sameSite === "string"
-        ? { sameSite: c.sameSite.toLowerCase() }
-        : {}),
-    });
-    await jar.setCookie(cookie, `https://${domain}${c.path}`);
-  }
-  return jar;
 }
 
 type Node = DefaultTreeAdapterMap["node"];
@@ -84,32 +26,19 @@ function tag(n: Node, name: string): boolean {
   return "tagName" in n && n.tagName === name;
 }
 
-/** Fresh server state and cookies only; no generated protection tokens or automatic retries. */
-export async function login(
+/**
+ * The sign-in redirect and form flow: fresh server state and cookies only.
+ * It generates no protection tokens; login.ts supplies those through `fetch`.
+ * Sends credentials at most once and never retries. The caller verifies the account.
+ */
+export async function runLoginFlow(
   credentials: LoginCredentials,
-  options: LoginOptions = {},
-): Promise<StarbucksClient> {
+  options: LoginFlowOptions,
+): Promise<void> {
   if (!credentials.username || !credentials.password)
     throw new Error("Username and password are required");
-  const jar = options.cookieJar ?? new CookieJar();
-  const fetcher = options.fetch ?? globalThis.fetch;
-  const client = new StarbucksClient(
-    new HttpTransport({ ...options, cookieJar: jar }),
-  );
-  const allowed = (u: URL): boolean =>
-    !u.username &&
-    !u.password &&
-    ((u.origin === ORIGIN &&
-      [
-        "/account/signin",
-        "/apiproxy/v1/account/a0/signin",
-        "/apiproxy/v1/oauth-callback",
-        "/account/post-signin",
-        "/rewards/my-rewards",
-        "/",
-      ].includes(u.pathname)) ||
-      (u.origin === AUTH_ORIGIN &&
-        ["/authorize", "/u/login", "/authorize/resume"].includes(u.pathname)));
+  const { jar, fetch: fetcher } = options;
+  const allowed = allowedLoginFlowRequest;
   async function request(
     url: URL,
     method = "GET",
@@ -280,8 +209,7 @@ export async function login(
     }
     if (!callbackSeen || url.origin !== ORIGIN)
       throw new StarbucksError("Login challenge or unsupported continuation");
-    await client.user();
-    return client;
+    return;
   }
   throw new StarbucksError("Login redirect limit exceeded");
 }
