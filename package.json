@@ -28,12 +28,12 @@
     "order:probe": "node scripts/probe-order.mjs",
     "order:context": "bun build scripts/order-context.mjs --target=node --packages=external --outfile=.starbucks/order-context.mjs > /dev/null && node .starbucks/order-context.mjs",
     "auth:fetch": "bun build scripts/fetch-login.mjs --target=node --packages=external --outfile=.starbucks/fetch-login.mjs > /dev/null && node --env-file=.env .starbucks/fetch-login.mjs",
-    "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs",
+    "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs tests/fetch-session-context.test.mjs",
     "history": "bun build scripts/history.mjs --target=node --packages=external --outfile=.starbucks/history.mjs && node .starbucks/history.mjs",
     "test:history": "bun test tests/history.test.mjs",
     "build": "bun -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && bun --bun tsc",
     "test": "bun run build && bun test ./tests --path-ignore-patterns '**/fetch-*.test.mjs' && bun run test:fetch",
-    "starbucks": "bun dist/cli.js",
+    "starbucks": "node dist/cli.js",
     "format": "oxfmt --write .",
     "lint": "oxlint --deny-warnings src tests scripts",
     "lint:fix": "oxlint --fix --deny-warnings src tests scripts",
@@ -42,19 +42,20 @@
   },
   "dependencies": {
     "commander": "^14.0.2",
+    "jsdom": "27.4.0",
     "parse5": "8.0.0",
     "playwright": "^1.63.0",
     "tough-cookie": "^6.0.2"
   },
   "devDependencies": {
     "@types/node": "^24.13.6",
-    "jsdom": "27.4.0",
     "oxfmt": "^0.70.0",
     "oxlint": "^1.85.0",
     "typescript": "5.9.3"
   },
   "engines": {
-    "bun": ">=1.3.14"
+    "bun": ">=1.3.14",
+    "node": ">=24.21.0"
   },
   "packageManager": "bun@1.3.14"
 }

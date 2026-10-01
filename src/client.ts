@@ -19,11 +19,10 @@ import type {
 } from "./types.js";
 import { toOrder } from "./cart.js";
 import { allowedRequest, ORIGIN, SUBMIT_ORDER_PATH } from "./safety.js";
-import {
-  protectedRequestHeaders,
-  validateRequestContext,
-} from "./request-context.js";
-import type { OrderRequestContext } from "./request-context.js";
+import type {
+  SessionContext,
+  SessionContextOptions,
+} from "./session-context.js";
 import {
   validateSubmissionRequest,
   validateOrderReference,
@@ -90,8 +89,10 @@ export interface HttpTransportOptions {
   cookieJar?: CookieJar;
   fetch?: typeof globalThis.fetch;
   timeoutMs?: number;
-  /** Captured vendor proof, scoped to each protected operation. May expire server-side. */
-  requestContext?: OrderRequestContext;
+  /** Optional context implementation for embedding/testing; default uses fresh website scripts. */
+  sessionContextFactory?: (
+    options: SessionContextOptions,
+  ) => Promise<SessionContext>;
   /** Off by default. Only the exact member submit-order route is enabled. */
   allowOrderSubmission?: boolean;
 }
@@ -99,14 +100,30 @@ export interface HttpTransportOptions {
 export class HttpTransport implements Transport {
   readonly cookieJar: CookieJar;
   private readonly fetcher: typeof globalThis.fetch;
-  private readonly requestContext?: OrderRequestContext;
+  private context?: Promise<SessionContext>;
   constructor(private readonly options: HttpTransportOptions = {}) {
-    if (options.requestContext) {
-      validateRequestContext(options.requestContext);
-      this.requestContext = structuredClone(options.requestContext);
-    }
     this.cookieJar = options.cookieJar ?? new CookieJar();
     this.fetcher = options.fetch ?? globalThis.fetch;
+  }
+  private getContext(): Promise<SessionContext> {
+    this.context ??= (async () => {
+      const options = {
+        cookieJar: this.cookieJar,
+        fetch: this.fetcher,
+        timeoutMs: this.options.timeoutMs ?? 25000,
+      };
+      if (this.options.sessionContextFactory)
+        return this.options.sessionContextFactory(options);
+      const { LiveSessionContext } = await import("./session-context.js");
+      return new LiveSessionContext(options);
+    })();
+    return this.context;
+  }
+  async orderRisk(): Promise<OrderRisk> {
+    return (await this.getContext()).risk();
+  }
+  async close(): Promise<void> {
+    (await this.context)?.close();
   }
   async request(path: string, body?: unknown): Promise<unknown> {
     const method = body === undefined ? "GET" : "POST";
@@ -122,13 +139,15 @@ export class HttpTransport implements Transport {
         "Endpoint is not permitted; order submission is disabled",
       );
     const url = new URL(path, ORIGIN);
+    const encodedBody = body === undefined ? undefined : JSON.stringify(body);
+    const protectedOperation =
+      path === "/apiproxy/v1/orchestra/price-order" ||
+      path === SUBMIT_ORDER_PATH;
+    const protection = protectedOperation
+      ? await (await this.getContext()).headers(path, encodedBody!)
+      : undefined;
     const cookie = await this.cookieJar.getCookieString(url.href);
-    const protection = protectedRequestHeaders(
-      this.requestContext,
-      url.pathname,
-    );
     const headers = {
-      ...protection,
       accept: "application/json",
       "x-requested-with": "XMLHttpRequest",
       ...(cookie ? { cookie } : {}),
@@ -145,10 +164,10 @@ export class HttpTransport implements Transport {
       signal: AbortSignal.timeout(this.options.timeoutMs ?? 25000),
       // Never forward account credentials to a redirect target.
       redirect: "error",
-      // Native Node fetch with this Headers serialization was verified live.
-      // Passing a plain object with protection fields first returned an edge 429.
-      headers: Object.keys(protection).length ? new Headers(headers) : headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      headers: protection
+        ? new Headers({ ...headers, ...Object.fromEntries(protection) })
+        : headers,
+      body: encodedBody,
     });
     for (const value of response.headers.getSetCookie())
       await this.cookieJar.setCookie(value, url.href);
@@ -168,6 +187,14 @@ export class HttpTransport implements Transport {
 export class StarbucksClient {
   private readonly attemptedOrders = new Set<string>();
   constructor(readonly transport: Transport = new HttpTransport()) {}
+  async orderRisk(): Promise<OrderRisk> {
+    if (!this.transport.orderRisk)
+      throw new Error("This transport does not generate device risk");
+    return this.transport.orderRisk();
+  }
+  async close(): Promise<void> {
+    await this.transport.close?.();
+  }
   async menu(store?: Store): Promise<Menu> {
     const q = store
       ? new URLSearchParams({

@@ -26,7 +26,21 @@ Observed on September 29, 2026 UTC:
 - The resulting session loaded all three transaction-history pages with HTTP 200, returning 114 unique visible entries. A purchase receipt and the empty eGift order list also returned 200. See [history contracts and verification](history.md).
 - The missing `src/preflight.ts` module has been restored. The full SDK/CLI build succeeds, and `auth status` verifies the fetch-login session. Regression tests exercise the built CLI's startup and account verification.
 
-## Order-flow verification (September 29, 2026 UTC)
+## Current session-only implementation
+
+The runtime capture importer, header-file option, and automatic header-file loading have been removed. CLI/client protected requests now use the cookie jar saved by `auth:fetch` and scripts fetched from the current website. Device risk is generated automatically; no risk file is required. The CLI runs under Node 24.21+ because Bun cannot execute the vendor runtime reliably.
+
+Local tests cover ignoring obsolete dump-derived files, generating fresh context using synthetic website scripts, Request-object handling, isolating context requests from order APIs, rejecting incomplete proof, and the full order flow with mock submission/status. Offline vendor-script experiments generated the six core form-proof fields; the optional `a0` field was not generated.
+
+Observed October 1, 2026 UTC using the session freshly saved by `auth:fetch`:
+
+- The read-only wallet and pricing probe passed. Both APIs returned HTTP 200, and pricing returned a USD 9.70 quote for the saved cart at store `17011-170949` with a 300-second lifetime.
+- `order review` passed its account, store/availability, menu, wallet, rewards, pickup-estimate, and pricing checks. It selected the wallet's default PayPal tender and reported a $9.70 total with no tip.
+- `order build-submit` generated fresh session context and constructed the submission payload locally. It made zero order API requests. No order was submitted and no post-submit status request was sent.
+
+The previous replay-based HTTP 200 results remain historical and are not the evidence for this session-only result. Submission acceptance and post-submit pickup lookup remain mock-tested only.
+
+## Historical order-flow verification (superseded replay implementation, September 29, 2026 UTC)
 
 - The supplied capture establishes member submission (`submit-order` → `ServiceTime`), pickup lookup, and previous-orders contracts. A sanitized fixture drives the complete SDK and CLI flow offline.
 - The full dump audit covered 478 requests, including all 21 application requests across 14 endpoints. All application response bodies were present.
@@ -42,7 +56,7 @@ See the [order-flow guide](order-flow.md) for command usage and the [403/429 inv
 
 ```sh
 bun run test
-bun run starbucks auth login
+bun run auth:fetch
 bun run starbucks auth status
 bun run starbucks cart show
 bun run starbucks cart quote

@@ -140,7 +140,7 @@ test("limited member authorization is surfaced as a sign-in requirement instead 
   });
 });
 
-test("captured protection headers reach only their exact operation, with live session cookies retained", async () => {
+test("fresh session protection reaches only protected operations, with live session cookies retained", async () => {
   const headers = Object.fromEntries(
     ["a", "a0", "b", "c", "d", "f", "z"].map((suffix) => [
       "x-dq7hy5l1-" + suffix,
@@ -155,11 +155,15 @@ test("captured protection headers reach only their exact operation, with live se
   const calls = [];
   const transport = new HttpTransport({
     cookieJar: jar,
-    requestContext: {
-      version: 1,
-      operations: {
-        "price-order": { capturedAt: "2026-09-29T02:10:00Z", headers },
-      },
+    sessionContextFactory: async (options) => {
+      assert.equal(options.cookieJar, jar);
+      return {
+        headers: async () => new Headers(headers),
+        risk: async () => {
+          throw Error("Not used");
+        },
+        close() {},
+      };
     },
     fetch: async (url, init) => {
       const supplied = new Headers(init.headers);

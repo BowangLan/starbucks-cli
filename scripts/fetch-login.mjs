@@ -156,6 +156,29 @@ async function network(input, init = {}) {
     });
   }
   if (
+    url.origin === "https://auth.starbucks.com" &&
+    url.pathname === "/u/login" &&
+    method === "POST" &&
+    response.status >= 400
+  ) {
+    // Capture the rejection so a failure explains itself instead of only a code.
+    const body = await response
+      .clone()
+      .text()
+      .catch(() => "");
+    await writePrivate(`${dir}/u-login-error.json`, {
+      status: response.status,
+      statusText: response.statusText,
+      location: response.headers.get("location"),
+      retryAfter: response.headers.get("retry-after"),
+      correlationId: response.headers.get("x-correlation-id"),
+      requestId: response.headers.get("x-request-id"),
+      body: body
+        .replaceAll(username, "<REDACTED>")
+        .replaceAll(password, "<REDACTED>"),
+    });
+  }
+  if (
     url.pathname === "/vendor/static/vendor2.js" &&
     !url.search &&
     response.status === 200

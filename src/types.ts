@@ -129,6 +129,8 @@ export interface PriceQuote {
 }
 export interface Transport {
   request(path: string, body?: unknown): Promise<unknown>;
+  orderRisk?(): Promise<OrderRisk>;
+  close?(): Promise<void>;
 }
 
 export interface HistoryOptions {

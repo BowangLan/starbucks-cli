@@ -2,17 +2,19 @@
 
 **[Complete SDK + CLI reference and Starbucks endpoint mapping](docs/reference.md)** — every command, SDK method, flag, request body, and implementation limitation.
 
-An unofficial TypeScript SDK and Bun CLI. Store/menu/cart/account API operations use standard `fetch`. **`auth login` uses a visible Playwright browser for manual sign-in**, then saves cookies and closes the browser. The browser is not used for other commands. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
+An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/menu/cart/account API operations use standard `fetch`. **`auth login` uses a visible Playwright browser for manual sign-in**, then saves cookies and closes the browser. The browser is not used for other commands. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
 
 ```sh
-bun run starbucks auth login
+# .env contains STARBUCKS_USERNAME and STARBUCKS_PASSWORD
+bun run auth:fetch
+bun run starbucks auth status
 ```
 
-Enter your username and password in the browser. The CLI waits for the signed-in redirect, verifies the account in that browser, writes `.starbucks/http-fetch-session.json` privately, and closes it automatically. It does not read credentials from `.env`, fill the form, or record login traffic. Closing the window or pressing Ctrl+C cancels without replacing the existing session. Default timeout is five minutes; use `auth login --timeout 600` for ten minutes.
+`auth:fetch` saves the verified cookie jar to `.starbucks/http-fetch-session.json`. Subsequent CLI commands use that session and fetch any fresh context they need from the current website. No dump import, request-header file, or manual context export is required. The separate `auth login` command remains available for manual browser sign-in.
 
-Wallet and pricing now pass live checks with full authorization and the captured request protection headers. A complete live preparation also passed, stopping before submission. These contexts expire independently; profile access alone does not prove checkout authorization. See [verification](docs/verification.md).
+The CLI/client use only the auth session for credentials. Pricing and submission prepare fresh protection using current website scripts; no network dump or imported header file is read. The live Palo Alto review and pricing check passed on October 1, 2026; submission itself remains untested against Starbucks. See [verification](docs/verification.md).
 
-Use Bun 1.3.14 or newer:
+Use Node 24.21+ and Bun 1.3.14+. `.node-version` pins the tested Node version:
 
 ```sh
 bun install --frozen-lockfile
@@ -138,16 +140,15 @@ bun run history --receipt '<history-id>' --output .starbucks/order-receipt.json
 
 History, receipt lookup, and eGift-history reads are implemented in the SDK. See [history API contracts and commands](docs/history.md).
 
-Prepare an order without submitting it:
+Review checkout and build its submit payload without placing the order:
 
 ```sh
-bun run starbucks order import-context --capture /path/to/network-dump-capture
-bun run order:context
-bun run starbucks order payments --risk-file .starbucks/order-risk.json
-bun run starbucks order prepare --risk-file .starbucks/order-risk.json
-bun run starbucks order request --risk-file .starbucks/order-risk.json
+bun run auth:fetch
+bun run starbucks order payments
+bun run starbucks order review
+bun run starbucks order build-submit
 ```
 
-Use the `store` and `cart add` commands above first. Preparation checks current café/menu availability, wallet payment eligibility, rewards, pickup estimates, and pricing. It writes a private review file and stops before submission. `order request` builds the submission body locally. `order status --id <uuid> --store <full-number>` reads pickup estimates for an existing order. Full contracts, explicit submission behavior, tests, and live limitations are in [the order-flow guide](docs/order-flow.md).
+Use the `store` and `cart add` commands above first. `order review` checks current café/menu availability, wallet payment eligibility, rewards, pickup estimates, and pricing, then writes a private review file. `order build-submit` generates fresh device context from the session and builds the actual submission payload locally without calling an order API. Only `order submit --confirm` sends it. `order status --id <uuid> --store <full-number>` reads pickup estimates for an existing order. Full contracts and submission behavior are in [the order-flow guide](docs/order-flow.md).
 
-`order import-context` extracts only seven protection headers per protected operation, never account cookies, and writes a private file used by the CLI. It does not call any API. `bun run order:probe --cart <cart.json>` verifies wallet and pricing, exits nonzero on either failure, and cannot submit. See the [403/429 investigation](docs/order-investigation.md) for the verified fixes and context lifetime limits.
+`bun run order:probe --cart <cart.json>` verifies wallet and pricing, exits nonzero on either failure, and cannot submit. Context is fetched/generated automatically and is never loaded from captures. `--risk-file` is an optional diagnostic override, not a setup requirement. Session expiry requires signing in again. See the [investigation](docs/order-investigation.md) for evidence and verification limits.

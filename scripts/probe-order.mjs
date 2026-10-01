@@ -3,9 +3,12 @@ import { Command } from "commander";
 import { CookieJar } from "tough-cookie";
 import { HttpTransport, StarbucksClient } from "../dist/index.js";
 import { writePrivate } from "../dist/files.js";
-import { retryNotBefore } from "./fetch-policy.mjs";
+import {
+  allowedCheckoutContextRequest,
+  retryNotBefore,
+} from "./fetch-policy.mjs";
 
-// Diagnostic only: exactly one wallet read and, if it passes, one price request.
+// Diagnostic only: context resources, one wallet read and, if it passes, one price request.
 // Neither submission nor status endpoints can pass this transport's allowlist.
 const options = new Command()
   .description("Probe live wallet and pricing; never submit or retry")
@@ -16,11 +19,6 @@ const options = new Command()
     ".starbucks/http-fetch-session.json",
   )
   .option("--risk-file <file>", "fresh optional wallet risk context")
-  .option(
-    "--request-context <file>",
-    "private captured request protection headers",
-    ".starbucks/order-request-context.json",
-  )
   .option("--out <file>", "redacted report", ".starbucks/order-probe.json")
   .parse()
   .opts();
@@ -31,18 +29,6 @@ const cart = JSON.parse(await fs.readFile(options.cart, "utf8"));
 const risk = options.riskFile
   ? JSON.parse(await fs.readFile(options.riskFile, "utf8"))
   : undefined;
-let requestContext;
-try {
-  requestContext = JSON.parse(
-    await fs.readFile(options.requestContext, "utf8"),
-  );
-} catch (error) {
-  if (
-    error.code !== "ENOENT" ||
-    options.requestContext !== ".starbucks/order-request-context.json"
-  )
-    throw error;
-}
 const cooldownFile = options.session + ".order-probe-cooldown.json";
 let cooldown = {};
 try {
@@ -64,9 +50,9 @@ let stopped = false;
 const client = new StarbucksClient(
   new HttpTransport({
     cookieJar: jar,
-    requestContext,
     fetch: async (input, init) => {
       const url = new URL(String(input));
+      const context = allowedCheckoutContextRequest(url, init.method ?? "GET");
       const permitted = new Set([
         "/apiproxy/v1/orchestra/get-starpay-wallet",
         "/apiproxy/v1/orchestra/price-order",
@@ -76,28 +62,30 @@ const client = new StarbucksClient(
           "Probe stopped; respect the saved Retry-After cooldown",
         );
       if (
-        url.origin !== "https://www.starbucks.com" ||
-        url.search ||
-        init.method !== "POST" ||
-        !permitted.has(url.pathname) ||
-        attempted.has(url.pathname)
+        !context &&
+        (url.origin !== "https://www.starbucks.com" ||
+          url.search ||
+          init.method !== "POST" ||
+          !permitted.has(url.pathname) ||
+          attempted.has(url.pathname))
       )
         throw new Error(
           "Probe permits one wallet read and one price request only",
         );
-      attempted.add(url.pathname);
+      if (!context) attempted.add(url.pathname);
       const response = await fetch(url, init);
-      requests.push({
-        endpoint: url.pathname,
-        status: response.status,
-        responseBytes: (await response.clone().arrayBuffer()).byteLength,
-        requestHeaderNames: [...new Headers(init.headers).keys()],
-        responseHeaderNames: [...response.headers.keys()],
-        server: response.headers.get("server"),
-        anticipationLevel: response.headers.get("x-anticipationlevel"),
-        ionHop: response.headers.get("x-ion-hop"),
-        retryAfter: response.headers.get("retry-after"),
-      });
+      if (!context)
+        requests.push({
+          endpoint: url.pathname,
+          status: response.status,
+          responseBytes: (await response.clone().arrayBuffer()).byteLength,
+          requestHeaderNames: [...new Headers(init.headers).keys()],
+          responseHeaderNames: [...response.headers.keys()],
+          server: response.headers.get("server"),
+          anticipationLevel: response.headers.get("x-anticipationlevel"),
+          ionHop: response.headers.get("x-ion-hop"),
+          retryAfter: response.headers.get("retry-after"),
+        });
       if (!response.ok) stopped = true;
       if (response.status === 429) {
         cooldown.notBefore = retryNotBefore(
@@ -165,6 +153,7 @@ try {
   report.checksPassed = !failure;
   if (failure) process.exitCode = 1;
 } finally {
+  await client.close();
   await writePrivate(options.session, await jar.serialize());
   await writePrivate(options.out, report);
   console.log(JSON.stringify(report, null, 2));

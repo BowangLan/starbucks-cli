@@ -1,6 +1,6 @@
 # Wallet 403 and pricing 429 investigation
 
-The initial checkout was failing. Both failures were reproduced independently before changing the implementation. Live verification on September 29, 2026 UTC now passes wallet and pricing, and the production CLI completed preparation through a fresh quote. No order was submitted.
+**Historical investigation:** the initial live successes below used captured header replay. That implementation was removed after the requirement was clarified: checkout must depend only on the credentials saved by `auth:fetch`. The replacement generates fresh context from current scripts, never reads a capture/header file, and passed live wallet, pricing, and checkout-review checks on October 1, 2026. No order has been submitted.
 
 ## Complete capture audit
 
@@ -42,18 +42,22 @@ Controlled comparisons, each limited to pricing and without submission:
 | Integrated protection headers passed as a plain object with protection fields first    | 429                        |
 | Same integrated context passed through a `Headers` object                              | 200                        |
 
-The final transport preserves the verified `Headers` serialization for protected requests. The exact server rule behind the serialization difference is unknown. Header values alone were not enough in the failing integrated test.
+The replay implementation preserved the verified `Headers` serialization for protected requests. The exact server rule behind the serialization difference is unknown. Header values alone were not enough in the failing integrated test.
 
-The new local importer stores only these seven headers separately for pricing and submission. It does not import account cookies. The transport validates and copies the context, scopes headers to their exact operation, and retains the existing default submission block.
+The removed importer stored seven headers separately for pricing and submission. It was useful as a diagnostic comparison, but was the wrong runtime architecture because it made checkout depend on a capture. The current code has no importer or header-file loading.
 
 Fresh vendor-script DOM experiments installed fetch/XHR hooks but emitted zero protection headers across absolute/relative fetch, browser-style options, and XHR variants. Debugger inspection exposed missing DOM capabilities; supplying media-query evaluation did not restore header generation. Those experimental shims were not shipped. Generating Iovation/Accertify risk context is therefore not evidence that request protection is ready.
 
-## Final live results
+## Historical live results
 
-At 06:15 UTC, `bun run order:probe --cart .starbucks/order-flow-test-cart.json` returned wallet 200 and pricing 200: one Butter Croissant, $4.25, `expiresIn: 300`. The report has `checksPassed: true` and `orderSubmitted: false`.
+At 06:15 UTC on September 29, `bun run order:probe --cart .starbucks/order-flow-test-cart.json` returned wallet 200 and pricing 200: one Butter Croissant, $4.25, `expiresIn: 300`. This used captured protection headers and is historical.
 
-The original café `17011-170949` was closed (`NOT_READY`, in-café pickup unavailable). A separate verification cart used an available Grande Caffè Americano at open café `26926-246085` in Honolulu. The normal `bun run starbucks ... order prepare` command completed at 06:15 UTC with a $4.97 quote. This exercised current account, store, menu, wallet, rewards, pickup estimate, and pricing. `order request` then constructed its submission envelope locally with `networkRequests: 0`.
+The original café `17011-170949` was closed (`NOT_READY`, in-café pickup unavailable). A separate verification cart used an available Grande Caffè Americano at open café `26926-246085` in Honolulu. The normal `bun run starbucks ... order review` command completed at 06:15 UTC with a $4.97 quote. This exercised current account, store, menu, wallet, rewards, pickup estimate, and pricing. `order build-submit` then constructed its submission envelope locally with `networkRequests: 0`.
 
 Private evidence: `.starbucks/order-probe.json` (failing baseline), `.starbucks/order-probe-fixed.json` (passing final probe), `.starbucks/order-flow-final-verification.json`, and the clearly marked `.starbucks/order-debug/` diagnostic directory. Test carts are separate from `.starbucks/http-cart.json`.
 
-Captured protection context may expire or be invalidated; automatic generation/renewal is not implemented. Full authorization must also remain valid. The probe stops on the first failure, exits nonzero, and persists a cooldown on 429. Submission acceptance and post-submit status remain tested with mocks only, as requested. No live submission was sent, and no real order was placed.
+## Replacement and current limits
+
+The SDK builds an ephemeral context from current website scripts and the auth cookie jar. It observes the vendor fetch hook locally and, if needed, uses the vendor form hook also used by `auth:fetch`. Form submission is intercepted locally. The core proof fields must be present and the bootstrap token must match the fresh script. Optional `a0` is preserved when available. Iovation/Accertify risk is generated automatically for request construction/submission. There is no proof-file cache or capture fallback.
+
+On October 1, 2026, the replacement passed the live wallet and pricing probe and the full `order review` for the saved Palo Alto cart. Pricing returned a USD 9.70 quote with a 300-second lifetime, and `order build-submit` constructed the payload with zero order API calls. Submission acceptance and post-submit status remain mock-tested only; no real order was placed.

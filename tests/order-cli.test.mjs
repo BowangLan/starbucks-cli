@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CookieJar } from "tough-cookie";
 import { createItem } from "../dist/index.js";
+import { nodeExecutable } from "./node-runtime.mjs";
 
 const cli = fileURLToPath(new URL("../dist/cli.js", import.meta.url));
 const fixture = JSON.parse(
@@ -42,8 +43,11 @@ async function workspace(run, { pickupFails = false } = {}) {
       `
       import assert from 'node:assert/strict';
       import fs from 'node:fs/promises';
+      import { contextFixture } from '${new URL("./fixtures/context-runtime.mjs", import.meta.url).href}';
       const f = JSON.parse(await fs.readFile('fixture.json', 'utf8'));
       globalThis.fetch = async (url, init) => {
+        const contextResponse = contextFixture(url);
+        if (contextResponse) return contextResponse;
         const endpoint = new URL(url).pathname;
         await fs.appendFile('network.jsonl', JSON.stringify({ endpoint, method: init.method }) + '\\n');
         const name = endpoint.split('/').at(-1);
@@ -68,9 +72,9 @@ async function workspace(run, { pickupFails = false } = {}) {
     );
     const command = (...args) =>
       spawnSync(
-        process.execPath,
+        nodeExecutable,
         [
-          "--preload",
+          "--import",
           path.join(dir, "fetch.mjs"),
           cli,
           "--session",
@@ -100,7 +104,7 @@ async function workspace(run, { pickupFails = false } = {}) {
 
 test("CLI prepares and builds a private request without submission or payment-secret output", () =>
   workspace(async ({ dir, command, calls }) => {
-    let result = command("prepare", "--out", "prepared.json");
+    let result = command("review", "--out", "prepared.json");
     assert.equal(result.status, 0, result.stderr);
     assert.equal(JSON.parse(result.stdout).orderSubmitted, false);
     assert.doesNotMatch(
@@ -113,7 +117,7 @@ test("CLI prepares and builds a private request without submission or payment-se
     );
     assert.equal((await calls()).length, 7);
     result = command(
-      "request",
+      "build-submit",
       "--file",
       "prepared.json",
       "--risk-file",
@@ -133,6 +137,24 @@ test("CLI prepares and builds a private request without submission or payment-se
     );
     assert.equal((await calls()).length, 7);
     result = command(
+      "build-submit",
+      "--file",
+      "prepared.json",
+      "--out",
+      "session-request.json",
+    );
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(JSON.parse(result.stdout).contextGenerated, true);
+    assert.equal(JSON.parse(result.stdout).orderApiRequests, 0);
+    const generated = JSON.parse(
+      await fs.readFile(path.join(dir, "session-request.json"), "utf8"),
+    );
+    assert.equal(
+      generated.variables.risk.deviceFingerprint,
+      "fixture-current-fingerprint",
+    );
+    assert.equal((await calls()).length, 7);
+    result = command(
       "submit",
       "--file",
       "prepared.json",
@@ -146,7 +168,7 @@ test("CLI prepares and builds a private request without submission or payment-se
 
 test("CLI mock submission persists acceptance and prevents a duplicate from a copied draft", () =>
   workspace(async ({ dir, command, calls }) => {
-    let result = command("prepare", "--out", "prepared.json");
+    let result = command("review", "--out", "prepared.json");
     assert.equal(result.status, 0, result.stderr);
     await fs.copyFile(
       path.join(dir, "prepared.json"),
@@ -191,7 +213,7 @@ test("CLI mock submission persists acceptance and prevents a duplicate from a co
 test("CLI preserves submitted state when the mock pickup read fails", () =>
   workspace(
     async ({ dir, command, calls }) => {
-      assert.equal(command("prepare", "--out", "prepared.json").status, 0);
+      assert.equal(command("review", "--out", "prepared.json").status, 0);
       const result = command(
         "submit",
         "--file",

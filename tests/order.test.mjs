@@ -58,6 +58,11 @@ function harness(overrides = {}, allowOrderSubmission = false) {
   const client = new StarbucksClient(
     new HttpTransport({
       allowOrderSubmission,
+      sessionContextFactory: async () => ({
+        headers: async () => new Headers(),
+        risk: async () => risk,
+        close() {},
+      }),
       fetch: async (url, init) => {
         const endpoint = new URL(url).pathname;
         const name = endpoint.split("/").at(-1);

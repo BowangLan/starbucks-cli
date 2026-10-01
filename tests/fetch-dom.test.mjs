@@ -3,6 +3,35 @@ import assert from "node:assert/strict";
 import { CookieJar } from "tough-cookie";
 import { FetchDOM } from "../scripts/fetch-dom.mjs";
 
+test("fetch accepts Request objects without turning their URL into [object Request]", async () => {
+  const calls = [];
+  const dom = new FetchDOM({
+    request: async (url, init) => {
+      calls.push({ url: url.href, init });
+      return Response.json({});
+    },
+  });
+  try {
+    const window = dom.open("<!doctype html>", "https://example.test/page");
+    const request = new Request("https://example.test/endpoint", {
+      method: "POST",
+      headers: { "x-fixture": "present" },
+      body: "payload",
+    });
+    await window.fetch(request);
+    assert.equal(calls[0].url, "https://example.test/endpoint");
+    assert.equal(calls[0].init.method, "POST");
+    assert.equal(
+      new Headers(calls[0].init.headers).get("x-fixture"),
+      "present",
+    );
+    assert.equal(calls[0].init.body, "payload");
+    assert.equal(calls[0].init.origin, "https://example.test");
+  } finally {
+    dom.close();
+  }
+});
+
 test("detached bootstrap can load runtime and contribute fields before form submission", async () => {
   const requested = [];
   const dom = new FetchDOM({
@@ -38,7 +67,12 @@ test("detached bootstrap can load runtime and contribute fields before form subm
     assert.equal(dom.submissions[0].fields.get("state"), "fresh-state");
     assert.equal(dom.submissions[0].fields.get("proof"), "fresh-fixture");
     assert.equal(dom.errors.length, 0);
-    assert.equal(window.WebSocket, undefined);
+    // WebSocket is enabled but bounded: only the Iovation endpoint is allowed.
+    assert.equal(typeof window.WebSocket, "function");
+    assert.throws(
+      () => new window.WebSocket("wss://evil.example.test/socket"),
+      /not permitted/,
+    );
   } finally {
     dom.close();
   }

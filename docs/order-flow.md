@@ -1,31 +1,36 @@
 # Member order flow
 
-Implemented from `network-dump-2026-09-29T02-09-20-076Z/tab-001`. Preparation uses live reads and pricing; submission is a separate, explicitly enabled operation. **No order was placed during implementation or verification.** Submission and post-submit lookup were tested with sanitized captured responses and an injected fetch implementation.
+The endpoint contracts were researched from browser observations and sanitized fixtures; the CLI/client runtime depends only on the credentials saved by `auth:fetch` and current website scripts. Checkout review uses live reads and pricing; submission is a separate, explicitly enabled operation. **No order was placed during implementation or verification.** Submission and post-submit lookup were tested with sanitized responses and injected fetch.
 
-## Prepare without placing an order
+## Review checkout and build the submit payload
 
 ```sh
 bun run build
-bun run starbucks order import-context --capture /path/to/network-dump-capture
+bun run auth:fetch
 bun run starbucks store --place 'Palo Alto' --name '3885 El Camino Real' --lat 37.412252 --lng=-122.135089
 bun run starbucks cart add --product 1033 --form single
-bun run order:context
-bun run starbucks order payments --risk-file .starbucks/order-risk.json
-bun run starbucks order prepare --risk-file .starbucks/order-risk.json
-bun run starbucks order request --risk-file .starbucks/order-risk.json
+bun run starbucks order payments
+bun run starbucks order review
+bun run starbucks order build-submit
 ```
 
-`order prepare` saves `.starbucks/prepared-order.json` with mode 0600 and prints a redacted review: café, items, payment type/last four, amount, tip, and expiration. It does **not** submit. `order request` constructs the exact submission envelope in `.starbucks/submit-order-request.json` locally, without network calls or printing device/payment secrets. Use `--out` to change either output path. Global `--cart` and `--session` select local state.
+`order review` saves `.starbucks/prepared-order.json` with mode 0600 and prints a redacted review: café, items, payment type/last four, amount, tip, and expiration. It does **not** submit. `order build-submit` obtains fresh device context from current website scripts and constructs the submission envelope in `.starbucks/submit-order-request.json` without calling any order API or printing device/payment secrets. Use `--out` to change either output path. Global `--cart` and `--session` select local state.
 
-Preparation refreshes account, store and in-café pickup availability, store menu, wallet, rewards, and pickup estimate, then obtains a fresh member quote. It stops at the first error. The quote must match the cart and mark every item `PURCHASABLE` and `isAvailable: true`. The captured quote expires after 300 seconds; `expiresIn` is interpreted as seconds and expiry is conservatively measured from the start of the pricing request. Changing cart or fulfillment requires preparing again.
+`order review` refreshes account, store and in-café pickup availability, store menu, wallet, rewards, and pickup estimate, then obtains a fresh member quote. It stops at the first error. The quote must match the cart and mark every item `PURCHASABLE` and `isAvailable: true`. The captured quote expires after 300 seconds; `expiresIn` is interpreted as seconds and expiry is conservatively measured from the start of the pricing request. Changing cart or fulfillment requires reviewing again.
 
 Payment selection uses the wallet's **MOP** action, not its reload/default fields. `--payment-index N` selects an index from `order payments`; otherwise the wallet must have exactly one MOP default. The successful capture used PayPal. The captured website bundle also maps credit/debit tender names to uppercase and Starbucks Cards to `SVC`, using `paymentInstrumentId` or `cardId` respectively. Stored-value balance checks include the tip; insufficient balance fails without reloading. `--tip` defaults to zero. Non-SVC payment requires the store to report `acceptsNonSvcMop: true`.
 
-`bun run order:context` runs the existing FetchDOM implementation with freshly downloaded vendor, Iovation, and Accertify scripts and the selected session cookie jar. It writes fresh risk context privately, without logging tokens. Its network policy excludes all account/order APIs and credential submission. This experimental helper uses the observed Accertify script URL; changes to Starbucks' scripts may require updating it. It needs Node 24.21+ and the development dependencies. Passing `--risk-file` to preparation is optional; submitting/building a submission request requires it. Context generation succeeding does not guarantee API acceptance.
+## Session-only runtime
 
-The Iovation/Accertify risk body and the request protection headers are separate requirements. `order import-context --capture <directory>` extracts the seven `x-dq7hy5l1-*` headers from each operation's latest successful captured request. It saves `.starbucks/order-request-context.json` with mode 0600, without copying cookies or sending requests. The CLI loads this file when present; global `--request-context <file>` selects another file. The transport applies headers only to the exact matching pricing or submission route. Captured headers do not enable submission.
+`auth:fetch` saves `.starbucks/http-fetch-session.json`. This is the only credential input to the CLI/client. There is no capture import command, request-context option, or implicit read of an old header file. Network dumps remain research material and sanitized test fixtures only.
 
-The importer supplies observed context; it does not renew that context. Its server-side lifetime is unknown. The current DOM helper does not generate these seven headers. If they expire, a new successful browser capture is needed. Wallet's `REAUTHENTICATION_REQUIRED` error instead means full account authorization expired: sign in again. In the verified session, the full authorization cookie lasted 20 minutes while extended profile access lasted longer. See the [investigation](order-investigation.md).
+Before a protected operation, the SDK downloads the current vendor/Iovation/Accertify scripts into an ephemeral FetchDOM context using the saved cookie jar. It first observes the vendor fetch hook locally. If that hook emits no proof, it uses the vendor form hook also used by `auth:fetch`; FetchDOM intercepts that form locally and never sends it. Proof must contain all six core fields and its bootstrap token must match the freshly downloaded script. The optional `a0` field is retained when generated. Missing proof, timeouts, or bootstrap errors stop before the API request. No imported or cached proof is used as a fallback.
+
+This fresh form-proof path has local synthetic integration coverage and offline vendor-script experiments. On October 1, 2026, the live Palo Alto cart quote succeeded using this path and the current `auth:fetch` session. The previous seven-header replay result is not evidence for the current implementation. Live order submission remains untested.
+
+`order build-submit` and explicitly confirmed `order submit` generate Iovation/Accertify risk automatically from the auth session. The optional `--risk-file` override and `bun run order:context` export are diagnostic tools, not required setup. The CLI uses Node 24.21+ because Bun cannot execute the vendor runtime reliably. SDK applications should call `await client.close()` in `finally` to release their ephemeral context.
+
+Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: run `auth:fetch` again. Profile access alone is insufficient. No automatic credential resubmission, order retry, or browser fallback is performed.
 
 ## Captured contracts
 
@@ -77,7 +82,7 @@ Captured success is `{data:{submitOrder:{__typename:"ServiceTime"}}}`. It contai
 
 ## Explicit submission and status
 
-`order submit --file <prepared-file> --risk-file <fresh-risk-file> --confirm` **places a real order**. It is implemented but was never executed against Starbucks in this work. It checks quote expiry, the signed-in account, and the current wallet payment/balance before making one submission attempt. There is no automatic reprice, retry, card reload, or payment creation. The SDK requires both `HttpTransport({allowOrderSubmission:true})` and `submitOrder(request, {confirm:true})`; generic `operation("submit-order")` remains blocked.
+`order submit --file <prepared-file> --confirm` **places a real order**. It is implemented but was never executed against Starbucks in this work. It checks quote expiry, the signed-in account, and the current wallet payment/balance before making one submission attempt. There is no automatic reprice, retry, card reload, or payment creation. The SDK requires both `HttpTransport({allowOrderSubmission:true})` and `submitOrder(request, {confirm:true})`; generic `operation("submit-order")` remains blocked.
 
 The CLI writes a private, exclusive journal at `.starbucks/order-attempts/<orderId>.json` before the request, preventing duplicate attempts from the same workspace, including copied draft files. It saves acceptance before the follow-up status read. A failed status read reports acceptance with status unavailable. If submission times out or cannot be confirmed, retain the order ID and reconcile status/history; do not delete the journal to retry. The SDK prevents repeated attempts for an order ID within a client instance; other SDK applications must persist their own attempt record.
 
@@ -97,17 +102,18 @@ import {
   prepareOrder,
   buildSubmissionRequest,
   summarizePreparedOrder,
-  importOrderRequestContext,
 } from "starbucks-web-sdk";
 
-const requestContext = await importOrderRequestContext(captureDirectory);
-const client = new StarbucksClient(
-  new HttpTransport({ cookieJar, requestContext }),
-);
-const prepared = await prepareOrder(client, cart, { risk });
-console.log(summarizePreparedOrder(prepared));
-const request = buildSubmissionRequest(prepared, risk); // local only
-// Stop here for pre-submit verification.
+const client = new StarbucksClient(new HttpTransport({ cookieJar }));
+try {
+  const prepared = await prepareOrder(client, cart);
+  console.log(summarizePreparedOrder(prepared));
+  const risk = await client.orderRisk();
+  const request = buildSubmissionRequest(prepared, risk); // no order API call
+  // Stop here for pre-submit verification.
+} finally {
+  await client.close();
+}
 ```
 
 The supported flow is authenticated US member ordering, immediate in-café pickup, one existing MOP wallet tender, and no reward redemption. Guest submission, new payment registration, reload, scheduled pickup, drive-through selection, multi-tender payment, and post-submit tipping were not established by this capture and remain outside this flow.
@@ -116,4 +122,4 @@ The supported flow is authenticated US member ordering, immediate in-café picku
 
 Sanitized contracts are in `tests/fixtures/order-capture.json`. Tests cover the complete prepare → submit → status sequence using mock fetch, strict default submission blocking, local request building, stale/changed/unavailable carts, account/payment handling, insufficient balance including tips, ambiguous outcomes, duplicate attempts, and acceptance persistence when pickup lookup fails.
 
-After diagnosing the initial 403/429 failures, the production probe returned wallet 200 and pricing 200 for the captured croissant cart ($4.25, 300-second quote). The normal Bun CLI then completed preparation for a separate available Grande Caffè Americano at an open Honolulu café ($4.97): account, current store, menu, wallet, rewards, pickup estimate, and pricing all passed. The captured Palo Alto café was closed during this final check, so its availability guard remains enforced. `order request` built the submission envelope locally with zero network requests. No submit-order or post-submit pickup-time request was sent. Evidence and remaining limitations are in the [investigation](order-investigation.md) and [verification status](verification.md).
+Earlier live checks passed wallet, pricing, and full preparation using replayed protection headers. That implementation has been removed because it required a network dump. The replacement uses only the auth session and current scripts. It passes local regression tests for fresh context, missing-proof rejection, ignored obsolete context files, preparation, and submission/status mocks. The October 1 live verification also passed wallet, pricing, full review, and local submit-payload construction. No order API was called for submission, and no order was submitted. See [verification status](verification.md).

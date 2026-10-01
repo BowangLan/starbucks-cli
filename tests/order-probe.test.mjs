@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { CookieJar } from "tough-cookie";
 import { createItem } from "../dist/index.js";
+import { nodeExecutable } from "./node-runtime.mjs";
 
 const fixture = JSON.parse(
   await fs.readFile(
@@ -36,8 +37,11 @@ test("diagnostic treats wallet 200 followed by pricing 429 as failure and preser
     await fs.writeFile(
       preload,
       `
+      import { contextFixture } from '${new URL("./fixtures/context-runtime.mjs", import.meta.url).href}';
       let calls = 0;
       globalThis.fetch = async (input, init) => {
+        const contextResponse = contextFixture(input);
+        if (contextResponse) return contextResponse;
         const pathname = new URL(input).pathname;
         if (init.method !== "POST" || ++calls > 2) throw new Error("Unexpected request");
         if (pathname.endsWith("/get-starpay-wallet")) return Response.json({data:{starPayWallet:{paymentInstruments:[],storedValueCards:[]}}});
@@ -47,7 +51,7 @@ test("diagnostic treats wallet 200 followed by pricing 429 as failure and preser
     `,
     );
     const args = [
-      "--preload",
+      "--import",
       preload,
       "scripts/probe-order.mjs",
       "--session",
@@ -57,7 +61,7 @@ test("diagnostic treats wallet 200 followed by pricing 429 as failure and preser
       "--out",
       report,
     ];
-    const result = spawnSync(process.execPath, args, { encoding: "utf8" });
+    const result = spawnSync(nodeExecutable, args, { encoding: "utf8" });
     assert.equal(result.status, 1, result.stderr);
     const data = JSON.parse(result.stdout);
     assert.equal(data.checksPassed, false);
@@ -76,7 +80,7 @@ test("diagnostic treats wallet 200 followed by pricing 429 as failure and preser
       await fs.readFile(session + ".order-probe-cooldown.json", "utf8"),
     );
     assert.ok(cooldown.notBefore > Date.now() + 110000);
-    const repeated = spawnSync(process.execPath, args, { encoding: "utf8" });
+    const repeated = spawnSync(nodeExecutable, args, { encoding: "utf8" });
     assert.equal(repeated.status, 1);
     const blocked = JSON.parse(repeated.stdout);
     assert.deepEqual(blocked.requests, []);

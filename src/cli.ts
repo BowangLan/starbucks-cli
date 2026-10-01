@@ -1,14 +1,9 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 import { Command } from "commander";
 import fs from "node:fs/promises";
 import { CookieJar } from "tough-cookie";
 import { importCookieJar } from "./auth.js";
 import { writePrivate } from "./files.js";
-import {
-  importOrderRequestContext,
-  validateRequestContext,
-} from "./request-context.js";
-import type { OrderRequestContext } from "./request-context.js";
 import { StarbucksClient, HttpTransport } from "./client.js";
 import {
   createItem,
@@ -36,7 +31,7 @@ import type {
 const program = new Command()
   .name("starbucks")
   .description(
-    "Starbucks web SDK: browse, customize, prepare an order, and check status. Submission requires explicit opt-in.",
+    "Starbucks web SDK: browse, customize, review checkout, and check status. Submission requires explicit opt-in.",
   )
   .version("0.1.0")
   .option(
@@ -44,12 +39,7 @@ const program = new Command()
     "private HTTP cookie jar",
     ".starbucks/http-fetch-session.json",
   )
-  .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json")
-  .option(
-    "--request-context <file>",
-    "private captured request protection headers",
-    ".starbucks/order-request-context.json",
-  );
+  .option("--cart <file>", "local SDK cart", ".starbucks/http-cart.json");
 const print = (value: unknown) => console.log(JSON.stringify(value, null, 2));
 async function session<T>(
   fn: (client: StarbucksClient) => Promise<T>,
@@ -68,28 +58,14 @@ async function session<T>(
       );
     throw new Error("Invalid HTTP cookie jar");
   }
-  let requestContext: OrderRequestContext | undefined;
-  try {
-    const value: unknown = JSON.parse(
-      await fs.readFile(program.opts().requestContext, "utf8"),
-    );
-    validateRequestContext(value);
-    requestContext = value;
-  } catch (error) {
-    if (
-      (error as NodeJS.ErrnoException).code !== "ENOENT" ||
-      program.getOptionValueSource("requestContext") === "cli"
-    )
-      throw error;
-  }
   const transport = new HttpTransport({
     cookieJar: jar,
     allowOrderSubmission,
-    requestContext,
   });
   try {
     return await fn(new StarbucksClient(transport));
   } finally {
+    await transport.close();
     await writePrivate(file, await jar.serialize());
   }
 }
@@ -412,37 +388,11 @@ cart
   );
 const order = program
   .command("order")
-  .description("Prepare, explicitly submit, or check an order")
+  .description("Review checkout, build a submit request, or submit an order")
   .action(() => {
     throw new Error(
-      "Use order prepare to review a checkout. No order was placed.",
+      "Use order review to review a checkout. No order was placed.",
     );
-  });
-order
-  .command("import-context")
-  .description(
-    "Extract protection headers from a network dump locally; no API calls",
-  )
-  .requiredOption("--capture <directory>", "network-dump capture directory")
-  .option(
-    "--out <file>",
-    "private context file",
-    ".starbucks/order-request-context.json",
-  )
-  .action(async (o) => {
-    const context = await importOrderRequestContext(o.capture);
-    await writePrivate(o.out, context);
-    print({
-      file: o.out,
-      operations: Object.entries(context.operations).map(
-        ([operation, value]) => ({
-          operation,
-          capturedAt: value.capturedAt,
-          headerNames: Object.keys(value.headers),
-        }),
-      ),
-      orderSubmitted: false,
-    });
   });
 order
   .command("payments")
@@ -459,10 +409,8 @@ order
     }),
   );
 order
-  .command("prepare")
-  .description(
-    "Check store, menu, wallet, rewards, pickup, and pricing; stop before submit",
-  )
+  .command("review")
+  .description("Check checkout details and save a review; stop before submit")
   .option(
     "--payment-index <number>",
     "index from order payments; otherwise use MOP default",
@@ -493,16 +441,16 @@ order
     }),
   );
 order
-  .command("request")
-  .description("Build a submission request locally; never send it")
+  .command("build-submit")
+  .description("Build the actual submission payload locally; never submit")
   .option(
     "--file <file>",
     "prepared checkout",
     ".starbucks/prepared-order.json",
   )
-  .requiredOption(
+  .option(
     "--risk-file <file>",
-    "fresh risk context; never reuse captured risk tokens",
+    "optional fresh risk override; otherwise generated from the auth session",
   )
   .option(
     "--out <file>",
@@ -513,15 +461,18 @@ order
     const prepared = JSON.parse(
       await fs.readFile(o.file, "utf8"),
     ) as PreparedOrder;
-    const request = buildSubmissionRequest(
-      prepared,
-      JSON.parse(await fs.readFile(o.riskFile, "utf8")),
-    );
+    validatePreparedOrder(prepared);
+    const risk = o.riskFile
+      ? JSON.parse(await fs.readFile(o.riskFile, "utf8"))
+      : await session((s) => s.orderRisk());
+    const request = buildSubmissionRequest(prepared, risk);
     await writePrivate(o.out, request);
     print({
       ...summarizePreparedOrder(prepared),
       requestFile: o.out,
-      networkRequests: 0,
+      ...(o.riskFile
+        ? { networkRequests: 0 }
+        : { contextGenerated: true, orderApiRequests: 0 }),
     });
   });
 order
@@ -556,17 +507,23 @@ order
     "prepared checkout",
     ".starbucks/prepared-order.json",
   )
-  .requiredOption("--risk-file <file>", "fresh risk context for this session")
-  .option("--confirm", "authorize the real purchase shown by order prepare")
+  .option(
+    "--risk-file <file>",
+    "optional fresh risk override; otherwise generated from the auth session",
+  )
+  .option("--confirm", "authorize the real purchase shown by order review")
   .action(async (o) => {
     if (o.confirm !== true)
       throw new Error("Submission requires --confirm. No order was placed.");
     const prepared = JSON.parse(
       await fs.readFile(o.file, "utf8"),
     ) as PreparedOrder;
-    const risk = JSON.parse(await fs.readFile(o.riskFile, "utf8")) as OrderRisk;
-    buildSubmissionRequest(prepared, risk);
+    validatePreparedOrder(prepared);
     await session(async (s) => {
+      const risk: OrderRisk = o.riskFile
+        ? JSON.parse(await fs.readFile(o.riskFile, "utf8"))
+        : await s.orderRisk();
+      buildSubmissionRequest(prepared, risk);
       const user = await s.user();
       if (user.exId !== prepared.accountId)
         throw new Error("Prepared order belongs to a different account");
