@@ -7,7 +7,7 @@ bun install --frozen-lockfile
 bun run auth:fetch
 ```
 
-The command reads `STARBUCKS_USERNAME` and `STARBUCKS_PASSWORD` from `.env`. It bundles only the auth runner and its SDK dependencies, then uses Node's native fetch. The existing `auth login` command still provides manual browser login.
+The command reads `STARBUCKS_USERNAME` and `STARBUCKS_PASSWORD` from `.env`. It bundles only the auth runner and its SDK dependencies, then uses Node's native fetch.
 
 Terminal output shows preparation, sign-in, account verification, and the saved session path. Detailed redacted traces are still saved privately. Add `--verbose` to print request diagnostics; failures include the trace-file path for inspection.
 

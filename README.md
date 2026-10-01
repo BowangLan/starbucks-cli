@@ -2,7 +2,7 @@
 
 **[Complete SDK + CLI reference and Starbucks endpoint mapping](docs/reference.md)** — every command, SDK method, flag, request body, and implementation limitation.
 
-An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/menu/cart/account API operations use standard `fetch`. **`auth login` uses a visible Playwright browser for manual sign-in**, then saves cookies and closes the browser. The browser is not used for other commands. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
+An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/menu/cart/account API operations use standard `fetch`. Sign-in (`bun run auth:fetch`) also uses `fetch`, running the website's protection scripts in jsdom; no browser is launched. Order submission is disabled by default and requires explicit opt-in. See the [captured order flow](docs/order-flow.md).
 
 ```sh
 # .env contains STARBUCKS_USERNAME and STARBUCKS_PASSWORD
@@ -10,7 +10,7 @@ bun run auth:fetch
 bun run starbucks auth status
 ```
 
-`auth:fetch` saves the verified cookie jar to `.starbucks/http-fetch-session.json`. Subsequent CLI commands use that session and fetch any fresh context they need from the current website. No dump import, request-header file, or manual context export is required. The separate `auth login` command remains available for manual browser sign-in.
+`auth:fetch` saves the verified cookie jar to `.starbucks/http-fetch-session.json`. Subsequent CLI commands use that session and fetch any fresh context they need from the current website. No dump import, request-header file, or manual context export is required.
 
 The CLI/client use only the auth session for credentials. Pricing and submission prepare fresh protection using current website scripts; no network dump or imported header file is read. The live Palo Alto review and pricing check passed on October 1, 2026; submission itself remains untested against Starbucks. See [verification](docs/verification.md).
 
@@ -19,7 +19,6 @@ Use Node 24.21+ and Bun 1.3.14+. `.node-version` pins the tested Node version:
 ```sh
 bun install --frozen-lockfile
 bun run build
-bunx playwright install chromium
 bun run test
 bun run starbucks menu --search 'Caffè Latte'
 bun run starbucks product 407 --form hot --options
@@ -107,20 +106,6 @@ console.log(quote.summary.priceLabel);
 ```
 
 `HttpTransport` accepts an injectable fetch function and timeout. Its fixed-origin allowlist permits observed menu/store reads and read/quote operations, rejects payment mutations, and disallows API redirects. Member submission alone can be enabled with `allowOrderSubmission: true`; the CLI enables it only for `order submit --confirm`. The separate login function follows only allowlisted authentication redirects and validates callback state. Session/cart files are atomically saved with mode 0600. `.env` and `.starbucks/` remain ignored to keep local credentials and account data private.
-
-The manual-login helper is a separate SDK entry point, loaded only when requested:
-
-```ts
-import { loginWithBrowser } from "starbucks-web-sdk/login";
-import { StarbucksClient, HttpTransport } from "starbucks-web-sdk";
-
-const cookieJar = await loginWithBrowser({
-  sessionFile: ".starbucks/http-fetch-session.json",
-});
-const client = new StarbucksClient(new HttpTransport({ cookieJar }));
-```
-
-`loginWithBrowser` accepts `timeoutMs` and an AbortSignal. The root SDK import remains independent of Playwright. The older low-level fetch `login(credentials, options)` remains experimental; the CLI uses manual browser login. See the [authentication reference](docs/reference.md#authentication-functions).
 
 An experimental credential login now also works with native Node `fetch` and a JavaScript DOM, without launching a browser:
 

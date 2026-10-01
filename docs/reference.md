@@ -1,8 +1,8 @@
 # SDK, CLI, and Starbucks API reference
 
-This documents the fetch-based SDK and manual browser login. The [order-flow reference](order-flow.md) documents the full member checkout, submission, status APIs, and fresh risk-context runner. Source: [CLI](../src/cli.ts), [client/transport](../src/client.ts), [cart helpers](../src/cart.ts), [types](../src/types.ts), and [endpoint allowlist](../src/safety.ts).
+This documents the fetch-based SDK and CLI. The [order-flow reference](order-flow.md) documents the full member checkout, submission, status APIs, and fresh risk-context runner. Source: [CLI](../src/cli.ts), [client/transport](../src/client.ts), [cart helpers](../src/cart.ts), [types](../src/types.ts), and [endpoint allowlist](../src/safety.ts).
 
-API endpoint paths below use **`https://www.starbucks.com`**. Login also uses **`https://auth.starbucks.com`**. API operations use standard `fetch`. Explicit `auth login` uses Playwright; failed API calls do not launch it.
+API endpoint paths below use **`https://www.starbucks.com`**. Login also uses **`https://auth.starbucks.com`**. API operations use standard `fetch`. No browser is used.
 
 **Verification:** earlier wallet/pricing successes used captured header replay. That runtime dependency has been removed. On October 1, 2026, the client generated fresh context from the auth session and passed live wallet, pricing, and checkout-review checks. Live submission acceptance remains unverified. See [verification](verification.md).
 
@@ -20,7 +20,6 @@ Order commands need only the cookie jar saved by `auth:fetch` (plus the user's c
 | `auth status`                                                                     | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Reads HTTP session file; requires nonempty `data.user.exId`. Prints `{authenticated:true, session}` only on success; otherwise exits with an error.                                        |
 | `whoami`                                                                          | `user()`                                  | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Prints the signed-in user profile (`data.user`) as JSON. Uses the default session or `--session <file>`; fails if the account is not authenticated.                                        |
 | `auth import --file <file>`                                                       | `importCookieJar()` → `user()`            | `POST /apiproxy/v1/orchestra/get-user`                                                                                                   | Accepts serialized `tough-cookie` JSON, storage-state objects, or cookie arrays. Verifies consumer authentication before saving the jar to `--session`. Does not perform login.            |
-| `auth login [--timeout <seconds>]`                                                | `loginWithBrowser(options)`               | Browser sign-in → authorization → login form → callback → signed-in page → `get-user`                                                    | User types credentials in visible Chromium. Saves cookies and closes browser after account verification. Default timeout 300 seconds; cancellation/failure preserves existing session.     |
 | `cards`                                                                           | `cards()`                                 | `POST /apiproxy/v1/orchestra/get-stored-value-card-list`                                                                                 | Prints nickname, last four digits, primary flag, and balance; omits full card number.                                                                                                      |
 | `wallet`                                                                          | `wallet()`                                | `POST /apiproxy/v1/orchestra/get-starpay-wallet`                                                                                         | Prints payment type, last four digits, default/status, and stored-value-card count. Does not select a payment instrument.                                                                  |
 | `store --place <place> --name <name> --lat <n> --lng <n>`                         | `stores(place, coordinates)`              | `GET /apiproxy/v1/locations?place=…&lat=…&lng=…`                                                                                         | Case-insensitive exact name match; requires `mobileOrdering.availability === "READY"`. Saves full store number in local cart. No store-selection API write.                                |
@@ -48,7 +47,7 @@ bun run starbucks --session .starbucks/my-http-session.json --cart .starbucks/my
 | `-h, --help`       | —                                    | Displays help.                                                                                                                                 |
 | `-V, --version`    | —                                    | Displays package CLI version.                                                                                                                  |
 
-Session cookies, including response `Set-Cookie` updates, are saved after session-backed commands, even when the request fails. `auth import` and `auth login` only replace the destination after successful verification. Session/cart JSON writes are atomic with file mode 0600. Saved session files are HTTP cookie jars; storage-state imports are converted locally.
+Session cookies, including response `Set-Cookie` updates, are saved after session-backed commands, even when the request fails. `auth:fetch` and `auth import` only replace the destination after successful verification. Session/cart JSON writes are atomic with file mode 0600. Saved session files are HTTP cookie jars; storage-state imports are converted locally.
 
 ### Cart customization flags
 
@@ -70,12 +69,6 @@ These flags apply to **both** `cart add` and `cart build`:
 Import from the package root (or `./dist/index.js` inside this checkout). The complete exports are [src/index.ts](../src/index.ts).
 
 ### Authentication functions
-
-`loginWithBrowser(options?: BrowserLoginOptions): Promise<CookieJar>` is exported separately from `starbucks-web-sdk/login` ([source](../src/browser-login.ts)). It opens visible Chromium, waits for the redirect to `www.starbucks.com/rewards/my-rewards`, verifies `get-user` inside that browser, converts cookies to a fetch-compatible jar, optionally saves it, and closes the browser. It does not read or fill credentials and does not capture requests or screenshots.
-
-Options: `sessionFile` (optional atomic mode-0600 save), `timeoutMs` (300000), `signal` (AbortSignal), and `launch` (optional custom browser launcher for embedding/testing). Timeout, window closure, account verification failure, and cancellation close the browser without replacing a saved session. Browser installation: `bunx playwright install chromium`.
-
-The CLI uses this manual flow. Browser login establishes browser authentication; later fetch API access may still be rejected independently.
 
 #### Experimental fetch-only login
 
@@ -255,4 +248,4 @@ bun run starbucks cart show
 bun run starbucks cart quote
 ```
 
-No `session start`, `--headed`, card reload, or rewards application is implemented. Existing-wallet payment selection, preparation, explicitly enabled member submission, and pickup lookup are documented in the [order-flow reference](order-flow.md). The default transport rejects submission. `auth login` provides manual browser sign-in. The separate `bun run auth:fetch` runner has completed a live credential login with fresh script-generated context; see its [verification and limitations](fetch-login.md).
+No `session start`, `--headed`, card reload, or rewards application is implemented. Existing-wallet payment selection, preparation, explicitly enabled member submission, and pickup lookup are documented in the [order-flow reference](order-flow.md). The default transport rejects submission. The separate `bun run auth:fetch` runner has completed a live credential login with fresh script-generated context; see its [verification and limitations](fetch-login.md).

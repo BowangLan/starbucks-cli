@@ -15,7 +15,8 @@ test("built CLI starts and exposes auth commands", () => {
   });
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /status/);
-  assert.match(result.stdout, /login/);
+  assert.match(result.stdout, /import/);
+  assert.doesNotMatch(result.stdout, /login/);
 });
 
 test("built auth status uses the selected session and verifies the account", async () => {

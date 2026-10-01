@@ -54,7 +54,7 @@ async function session<T>(
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
       throw new Error(
-        "No HTTP session. Use auth login or auth import --file <file>.",
+        "No HTTP session. Use bun run auth:fetch or auth import --file <file>.",
       );
     throw new Error("Invalid HTTP cookie jar");
   }
@@ -187,35 +187,6 @@ auth
     await writePrivate(program.opts().session, await jar.serialize());
     print({ authenticated: true, session: program.opts().session });
   });
-auth
-  .command("login")
-  .description("Open a browser for manual sign-in, save cookies, then close it")
-  .option("--timeout <seconds>", "time allowed for sign-in", "300")
-  .action(async (o) => {
-    const timeoutMs = Number(o.timeout) * 1000;
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
-      throw new Error("Invalid login timeout");
-    const { loginWithBrowser } = await import("./browser-login.js");
-    const controller = new AbortController();
-    const cancel = () => controller.abort();
-    process.once("SIGINT", cancel);
-    process.once("SIGTERM", cancel);
-    console.error(
-      "Sign in in the browser window. It will close automatically after your account is verified and cookies are saved.",
-    );
-    try {
-      await loginWithBrowser({
-        sessionFile: program.opts().session,
-        timeoutMs,
-        signal: controller.signal,
-      });
-      print({ authenticated: true, session: program.opts().session });
-    } finally {
-      process.off("SIGINT", cancel);
-      process.off("SIGTERM", cancel);
-    }
-  });
-
 program.command("cards").action(() =>
   session(async (s) => {
     const cards = await s.cards();

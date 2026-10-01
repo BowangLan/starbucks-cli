@@ -91,14 +91,14 @@ test("auth failure and rate limits are surfaced without retries", async () => {
     assert.equal(calls, 1);
   }
 });
-test("browser runtime is isolated to explicit login entry point", async () => {
+test("no browser automation dependency, export, or import exists", async () => {
   const pkg = JSON.parse(
     await fs.readFile(new URL("../package.json", import.meta.url)),
   );
-  assert.ok(pkg.dependencies.playwright);
-  assert.equal(pkg.exports["./login"].import, "./dist/browser-login.js");
+  for (const name of ["playwright", "puppeteer"])
+    assert.equal(pkg.dependencies[name], undefined);
+  assert.deepEqual(Object.keys(pkg.exports), ["."]);
   for (const file of await fs.readdir(new URL("../src/", import.meta.url))) {
-    if (file === "browser-login.ts") continue;
     const text = await fs.readFile(
       new URL("../src/" + file, import.meta.url),
       "utf8",
@@ -108,11 +108,6 @@ test("browser runtime is isolated to explicit login entry point", async () => {
       /from\s+["'][^"']*(?:playwright|puppeteer|child_process|browser\.js|service\.js)["']/,
     );
   }
-  const root = await fs.readFile(
-    new URL("../src/index.ts", import.meta.url),
-    "utf8",
-  );
-  assert.ok(!root.includes("browser-login"));
   const files = await fs.readdir(new URL("../dist/", import.meta.url));
   assert.ok(!files.some((f) => /^(browser|service)\./.test(f)));
 });
