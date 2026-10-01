@@ -50,7 +50,7 @@ Fresh vendor-script DOM experiments installed fetch/XHR hooks but emitted zero p
 
 ## Historical live results
 
-At 06:15 UTC on September 29, `bun run order:probe --cart .starbucks/order-flow-test-cart.json` returned wallet 200 and pricing 200: one Butter Croissant, $4.25, `expiresIn: 300`. This used captured protection headers and is historical.
+The retired order probe returned wallet 200 and pricing 200 at 06:15 UTC on September 29: one Butter Croissant, $4.25, `expiresIn: 300`. This used captured protection headers and is historical.
 
 The original café `17011-170949` was closed (`NOT_READY`, in-café pickup unavailable). A separate verification cart used an available Grande Caffè Americano at open café `26926-246085` in Honolulu. The normal `bun run starbucks ... order review` command completed at 06:15 UTC with a $4.97 quote. This exercised current account, store, menu, wallet, rewards, pickup estimate, and pricing. `order build-submit` then constructed its submission envelope locally with `networkRequests: 0`.
 

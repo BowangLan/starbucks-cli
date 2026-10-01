@@ -28,7 +28,7 @@ Before a protected operation, the SDK downloads the current vendor/Iovation/Acce
 
 This fresh form-proof path has local synthetic integration coverage and offline vendor-script experiments. On October 1, 2026, the live Palo Alto cart quote succeeded using this path and the current `auth:fetch` session. The previous seven-header replay result is not evidence for the current implementation. Live order submission remains untested.
 
-`order build-submit` and explicitly confirmed `order submit` generate Iovation/Accertify risk automatically from the auth session. The optional `--risk-file` override and `bun run order:context` export are diagnostic tools, not required setup. The CLI uses Node 24.21+ because Bun cannot execute the vendor runtime reliably. SDK applications should call `await client.close()` in `finally` to release their ephemeral context.
+`order build-submit` and explicitly confirmed `order submit` generate Iovation/Accertify risk automatically from the auth session. The `--risk-file` option remains available as a diagnostic override. The CLI uses Node 24.21+ because Bun cannot execute the vendor runtime reliably. SDK applications should call `await client.close()` in `finally` to release their ephemeral context.
 
 Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: run `auth:fetch` again. Profile access alone is insufficient. No automatic credential resubmission, order retry, or browser fallback is performed.
 
