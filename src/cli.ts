@@ -237,6 +237,71 @@ program.command("wallet").action(() =>
   }),
 );
 program
+  .command("history")
+  .description("Read account history, receipts, and eGift orders")
+  .option("--offset <number>", "history offset", "0")
+  .option("--limit <number>", "history page size, 1–50", "50")
+  .option("--all", "read remaining history pages sequentially")
+  .option(
+    "--receipt <historyId>",
+    "read the receipt for an owned history entry",
+  )
+  .option("--gifts", "read eGift order history")
+  .option("--gift-order <orderId>", "read an owned eGift order")
+  .option(
+    "--output <file>",
+    "save the full result privately; print only a summary",
+  )
+  .action((o) => {
+    if ([o.all, o.receipt, o.gifts, o.giftOrder].filter(Boolean).length > 1)
+      throw new Error(
+        "Choose only one of --all, --receipt, --gifts, or --gift-order",
+      );
+    return session(async (s) => {
+      let result: unknown, summary: Record<string, unknown>;
+      if (o.receipt) {
+        result = await s.historyReceipt(o.receipt);
+        summary = { kind: "receipt", found: true };
+      } else if (o.gifts) {
+        const orders = await s.giftOrderHistory();
+        result = orders;
+        summary = { kind: "eGift-history", orderCount: orders.length };
+      } else if (o.giftOrder) {
+        result = await s.giftOrderDetails(o.giftOrder);
+        summary = { kind: "eGift-order", found: true };
+      } else {
+        const paging = { offset: Number(o.offset), limit: Number(o.limit) };
+        if (o.all) {
+          const pages = [];
+          const historyItems = [];
+          for await (const page of s.transactionHistoryPages(paging)) {
+            pages.push(page.paging);
+            historyItems.push(...page.historyItems);
+          }
+          result = { pages, historyItems };
+          summary = {
+            kind: "history",
+            pageCount: pages.length,
+            itemCount: historyItems.length,
+            serverTotal: pages.at(-1)?.total,
+          };
+        } else {
+          const page = await s.transactionHistory(paging);
+          result = page;
+          summary = {
+            kind: "history",
+            itemCount: page.historyItems.length,
+            paging: page.paging,
+          };
+        }
+      }
+      if (o.output) {
+        await writePrivate(o.output, result);
+        print({ ...summary, outputFile: o.output });
+      } else print(result);
+    });
+  });
+program
   .command("store")
   .requiredOption("--place <place>")
   .requiredOption("--name <name>")

@@ -134,8 +134,8 @@ It runs the current vendor, Iovation, and Accertify scripts, keeps their cookies
 Read order/rewards history with that session:
 
 ```sh
-bun run history --all --output .starbucks/order-history.json
-bun run history --receipt '<history-id>' --output .starbucks/order-receipt.json
+bun run starbucks history --all --output .starbucks/order-history.json
+bun run starbucks history --receipt '<history-id>' --output .starbucks/order-receipt.json
 ```
 
 History, receipt lookup, and eGift-history reads are implemented in the SDK. See [history API contracts and commands](docs/history.md).

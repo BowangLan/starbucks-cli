@@ -2,17 +2,17 @@ Account history and receipts work with the session produced by `bun run auth:fet
 
 ```sh
 # Load every available page, saving the full result with mode 0600.
-bun run history --all --output .starbucks/order-history.json
+bun run starbucks history --all --output .starbucks/order-history.json
 
 # Fetch one page; omit --output to print its JSON.
-bun run history --offset 0 --limit 50
+bun run starbucks history --offset 0 --limit 50
 
 # Fetch a receipt using a historyId from the returned historyItems.
-bun run history --receipt '<history-id>' --output .starbucks/order-receipt.json
+bun run starbucks history --receipt '<history-id>' --output .starbucks/order-receipt.json
 
 # Related eGift reads.
-bun run history --gifts --output .starbucks/egift-order-history.json
-bun run history --gift-order '<order-id>' --output .starbucks/egift-order.json
+bun run starbucks history --gifts --output .starbucks/egift-order-history.json
+bun run starbucks history --gift-order '<order-id>' --output .starbucks/egift-order.json
 ```
 
 The default session is `.starbucks/http-fetch-session.json`; override with `--session <file>`. Session-cookie updates are retained. No credential submission occurs during these reads. API failures stop the command without retries.

@@ -29,7 +29,6 @@
     "order:context": "bun build scripts/order-context.mjs --target=node --packages=external --outfile=.starbucks/order-context.mjs > /dev/null && node .starbucks/order-context.mjs",
     "auth:fetch": "bun build scripts/fetch-login.mjs --target=node --packages=external --outfile=.starbucks/fetch-login.mjs > /dev/null && node --env-file=.env .starbucks/fetch-login.mjs",
     "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs tests/fetch-session-context.test.mjs",
-    "history": "bun build scripts/history.mjs --target=node --packages=external --outfile=.starbucks/history.mjs && node .starbucks/history.mjs",
     "test:history": "bun test tests/history.test.mjs",
     "build": "bun -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && bun --bun tsc",
     "test": "bun run build && bun test ./tests --path-ignore-patterns '**/fetch-*.test.mjs' && bun run test:fetch",
