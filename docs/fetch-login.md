@@ -28,8 +28,10 @@ The successful experiment's redacted local trace is `.starbucks/debug-fetch-logi
 
 Results depend on the egress IP address: after switching to a different IP, Starbucks may reject the sign-in. It executes the site's current JavaScript in a DOM emulator; it is not a static HTTP form replay. The emulator implements the document-write and cross-origin message behavior needed by these scripts and routes observed resource, XHR, fetch, and beacon traffic through the same bounded fetch transport. It omits WebSockets, canvas/WebGL, and optional analytics. Those omissions did not prevent the observed login. Endpoint names and page scripts can change, and one success does not establish reliability across other accounts or environments.
 
-The standard CLI can verify the saved fetch-login session:
+The standard CLI can verify profile access with the saved fetch-login session:
 
 ```sh
 bun run starbucks auth status
 ```
+
+Starbucks' observed full authorization lasts 20 minutes, while account recognition lasts about 30 days. `auth status` and `auth refresh` can still report `authenticated: true` after payment authorization expires. The checkout login follows the same password/OAuth flow as this command; its different return destination does not establish a separate permission request. Run `login` again, then `order payments` to verify wallet access. See [session lifetimes and checkout reauthentication](auth-sessions.md).

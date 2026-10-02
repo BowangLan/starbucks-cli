@@ -67,6 +67,8 @@ The default HTTP session file is `.starbucks/http-fetch-session.json`; override 
 
 `whoami` prints the signed-in user profile as JSON. The SDK equivalent is `await client.user()`, which calls `POST /apiproxy/v1/orchestra/get-user` using the session cookies.
 
+Starbucks keeps account recognition longer than payment authorization: the observed full-auth cookie lasts 20 minutes, while extended cookies last about 30 days, even with stay-signed-in enabled. `auth status` or `auth refresh` can report `authenticated: true` while wallet reads require login. Run `login` again, then `order payments` to verify payment access. See [session lifetimes and checkout reauthentication](docs/auth-sessions.md).
+
 `cart preflight` fetches account status, a member price quote, and wallet data. It does not open a payment screen or establish final order acceptance. `cards` and `wallet` CLI outputs mask card numbers and omit payment secrets. SDK methods return the underlying API data.
 
 A separate draft can be created and priced:

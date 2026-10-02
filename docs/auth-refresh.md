@@ -34,6 +34,8 @@ The captured website bundle also checks the `s_check` short/extended timestamps 
 
 ## Limits and verification
 
+Starbucks distinguishes long-lived account recognition from short-lived payment authorization. The checkout capture issued `.SbuxA0Auth` for 20 minutes even with stay-signed-in enabled. `auth refresh` and `auth status` can succeed after that cookie expires while wallet reads require login. See [session lifetimes and checkout reauthentication](auth-sessions.md) for the capture evidence, comparison with CLI login, and command semantics.
+
 A successful refresh confirms account-profile access. It does not guarantee expired-token renewal or full checkout authorization: an account with role `user:limited` may still need sign-in. If Starbucks rejects the session, use `starbucks login` or import cookies from a signed-in session with `starbucks auth import --file <file>`.
 
 Automated tests cover the exact captured body, cookie scoping, immediate private persistence, successful responses without rotation, rejected responses with cookie deletions, no retries, missing sessions, and CLI output. Tests use synthetic credentials; this change does not make a live request with the private capture cookies. The two supplied browser captures are the live evidence for the IP comparison.

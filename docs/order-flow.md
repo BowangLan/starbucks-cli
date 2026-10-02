@@ -30,7 +30,7 @@ This fresh form-proof path has local synthetic integration coverage and offline 
 
 `order build-submit` and explicitly confirmed `order submit` generate Iovation/Accertify risk automatically from the auth session. The `--risk-file` option remains available as a diagnostic override. The CLI uses Node 24.21+ because Bun cannot execute the vendor runtime reliably. SDK applications should call `await client.close()` in `finally` to release their ephemeral context.
 
-Wallet's `REAUTHENTICATION_REQUIRED` means full account authorization expired: run `starbucks login` again. Profile access alone is insufficient. No automatic credential resubmission, order retry, or browser fallback is performed.
+Wallet's `REAUTHENTICATION_REQUIRED` means the current session lacks full account authorization: run `starbucks login` again, then `starbucks order payments` to verify wallet access. The observed full-auth cookie lasts 20 minutes, while extended account recognition lasts about 30 days. `auth status` and `auth refresh` can succeed with only profile access and do not establish payment permission. See [session lifetimes and checkout reauthentication](auth-sessions.md). No automatic credential resubmission, order retry, or browser fallback is performed.
 
 ## Captured contracts
 

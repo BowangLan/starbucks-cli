@@ -97,6 +97,8 @@ Login requests:
 
 Cookies are processed on every response and scoped to each destination. Redirects never forward the credential body. Unexpected destinations, form/state changes, unsupported challenges, HTTP errors, and redirect limits terminate the flow. A returned login form does not trigger another credential submission. With `stateDir`, a cooldown file enforces at least 60 seconds between credential attempts and honors longer `Retry-After` values.
 
+**Authorization lifetime:** the observed `.SbuxA0Auth` cookie lasts 20 minutes, while extended cookies last about 30 days. Profile verification by `auth status`, `auth refresh`, `auth import`, or `login` does not independently establish payment access. `authenticated: true` can coexist with `user:limited`; use `login` followed by `order payments` when wallet access requires reauthentication. See [session lifetimes and checkout reauthentication](auth-sessions.md).
+
 **Limitation:** Starbucks may reject the fetch login after the machine switches to a different IP address. Mock tests cover the redirect flow; live acceptance depends on the server. `auth import --file <file>` accepts cookies exported from a signed-in browser session instead.
 
 ### `StarbucksClient` and `FetchStarbucksClient`
