@@ -38,14 +38,14 @@ export async function runLoginFlow(
   if (!credentials.username || !credentials.password)
     throw new Error("Username and password are required");
   const { jar, fetch: fetcher } = options;
-  const allowed = allowedLoginFlowRequest;
   async function request(
     url: URL,
     method = "GET",
     body?: URLSearchParams,
     referer?: string,
   ) {
-    if (!allowed(url)) throw new StarbucksError("Unexpected login destination");
+    if (!allowedLoginFlowRequest(url))
+      throw new StarbucksError("Unexpected login destination");
     const cookie = await jar.getCookieString(url.href);
     let response: Response;
     try {
@@ -112,7 +112,7 @@ export async function runLoginFlow(
     throw new StarbucksError("Invalid authorization URL");
   }
   if (
-    !allowed(url) ||
+    !allowedLoginFlowRequest(url) ||
     url.origin !== AUTH_ORIGIN ||
     url.pathname !== "/authorize"
   )
@@ -137,7 +137,7 @@ export async function runLoginFlow(
       if (submitted && [307, 308].includes(response.status))
         throw new StarbucksError("Refusing credential-preserving redirect");
       const next = new URL(location, url);
-      if (!allowed(next))
+      if (!allowedLoginFlowRequest(next))
         throw new StarbucksError("Unexpected login redirect destination");
       if (
         next.origin === ORIGIN &&

@@ -22,7 +22,7 @@ const USER_AGENT =
 /**
  * Sign in with fetch alone: the website's own protection scripts run in jsdom
  * so the credential form carries the fields a browser would send. Results vary
- * with the egress IP address; browser login is the fallback.
+ * with the egress IP address; `auth import` of exported cookies is the alternative.
  */
 export async function fetchLogin(
   credentials: LoginCredentials,

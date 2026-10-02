@@ -20,7 +20,7 @@
     }
   },
   "scripts": {
-    "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs tests/fetch-session-context.test.mjs",
+    "test:fetch": "node --test tests/fetch-dom.test.mjs tests/fetch-policy.test.mjs tests/fetch-session-context.test.mjs tests/fetch-login.test.mjs",
     "test:history": "bun test tests/history.test.mjs",
     "build": "bun -e \"import { rmSync } from 'node:fs'; rmSync('dist', { recursive: true, force: true })\" && bun --bun tsc",
     "test": "bun run build && bun test ./tests --path-ignore-patterns '**/fetch-*.test.mjs' && bun run test:fetch",

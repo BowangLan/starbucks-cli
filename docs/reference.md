@@ -87,9 +87,9 @@ Login requests:
 
 1. `GET www.starbucks.com/account/signin?ReturnUrl=%2F`.
 2. Empty `POST www.starbucks.com/apiproxy/v1/account/a0/signin?returnUrl=%2F` with JSON content type. Response is a JSON string containing the authorization URL.
-3. `GET auth.starbucks.com/authorize?...` using the returned state and PKCE challenge. The implementation does not append the browser-generated `x-fp` value.
+3. `GET auth.starbucks.com/authorize?...` using the returned state and PKCE challenge, with the Iovation fingerprint generated in jsdom appended as `x-fp`.
 4. Follow the server redirect to `GET auth.starbucks.com/u/login?state=...`. Parse server hidden fields with an HTML parser; verify hidden state matches the URL.
-5. Form-encoded `POST` to that exact login URL with fresh hidden fields, `username`, `password`, and (by default) `ulp-stay-signed-in=on`. Does not synthesize `ulp-fp-part-*`, Accertify, Datadog, or dynamic vendor fields.
+5. Form-encoded `POST` to that exact login URL with fresh hidden fields, `username`, `password`, and (by default) `ulp-stay-signed-in=on`. The page's own submit hooks, running in jsdom, add the vendor `X-DQ7Hy5L1-*`, `ulp-uba-id`, and `ulp-fp-part-*` fields; credentials are not sent unless all of them are present and their tokens agree.
 6. Follow allowlisted redirects through `/authorize/resume` and `www.starbucks.com/apiproxy/v1/oauth-callback?code=...&state=...`; callback state must equal the original authorization state.
 7. Reach the Starbucks post-sign-in page and verify `POST /apiproxy/v1/orchestra/get-user`.
 
