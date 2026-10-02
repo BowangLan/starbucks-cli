@@ -154,6 +154,15 @@ program
     });
   });
 const auth = program.command("auth");
+auth
+  .command("refresh")
+  .description("Verify the saved auth session and save returned cookie updates")
+  .action(() =>
+    session(async (s) => {
+      await s.refreshSession();
+      print({ authenticated: true, session: program.opts().session });
+    }),
+  );
 auth.command("status").action(() =>
   session(async (s) => {
     await s.user();

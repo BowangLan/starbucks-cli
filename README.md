@@ -7,6 +7,7 @@ An unofficial TypeScript SDK and Node CLI (built and tested with Bun). Store/men
 ```sh
 # .env contains STARBUCKS_USERNAME and STARBUCKS_PASSWORD
 bun run starbucks login
+bun run starbucks auth refresh
 bun run starbucks auth status
 ```
 
@@ -61,6 +62,8 @@ bun run starbucks cart preflight
 ```
 
 The default HTTP session file is `.starbucks/http-fetch-session.json`; override with `--session <file>`. Requests use domain/path/expiry-aware cookies and retain response `Set-Cookie` updates. API errors do not automatically launch a browser or retry.
+
+`starbucks auth refresh` sends the captured `get-user` request with `{}`, verifies the signed-in account, and immediately saves any returned cookie updates to the selected session file. It uses the existing session without username/password credentials. A failed refresh preserves the saved session. The two October 2 captures show the same successful account request before and after the reported IP switch, but neither captures auth-token rotation. This command cannot guarantee renewal of expired credentials or restore full checkout authorization; use `login` or `auth import` when sign-in is required. See the [capture comparison](docs/auth-refresh.md).
 
 `whoami` prints the signed-in user profile as JSON. The SDK equivalent is `await client.user()`, which calls `POST /apiproxy/v1/orchestra/get-user` using the session cookies.
 
@@ -139,4 +142,4 @@ bun run starbucks order build-submit
 
 Use the `store` and `cart add` commands above first. `order review` checks current café/menu availability, wallet payment eligibility, rewards, pickup estimates, and pricing, then writes a private review file. `order build-submit` generates fresh device context from the session and builds the actual submission payload locally without calling an order API. Only `order submit --confirm` sends it. `order status --id <uuid> --store <full-number>` reads pickup estimates for an existing order. Full contracts and submission behavior are in [the order-flow guide](docs/order-flow.md).
 
-Context is fetched/generated automatically and is never loaded from captures. Session expiry requires signing in again. See the [investigation](docs/order-investigation.md) for evidence and verification limits.
+Context is fetched/generated automatically and is never loaded from captures. Use `auth refresh` to verify and update an existing session; if Starbucks requires sign-in, use `login` or `auth import`. See the [investigation](docs/order-investigation.md) for evidence and verification limits.

@@ -47,6 +47,8 @@ export interface StarbucksClient {
   ): Promise<LoginResult>;
   /** Verify exported cookies (jar, storage state, or cookie array) and adopt them. */
   importSession(input: unknown): Promise<void>;
+  /** Verify the existing session with get-user and persist returned cookie updates. */
+  refreshSession(): Promise<void>;
   hasSession(): Promise<boolean>;
   /** Persist refreshed cookies and release page contexts. */
   close(): Promise<void>;

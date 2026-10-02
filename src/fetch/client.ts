@@ -136,6 +136,20 @@ export class FetchStarbucksClient implements StarbucksClient {
     await verifyAccount(this.httpTransport(jar));
     await this.adopt(jar);
   }
+  async refreshSession(): Promise<void> {
+    await this.requireSession();
+    // Stage updates separately so a rejected refresh preserves the saved session.
+    const jar = await (await this.session()).jar.clone();
+    const result = (await this.httpTransport(jar).request(
+      "/apiproxy/v1/orchestra/get-user",
+      {},
+    )) as { data?: { user?: { exId?: string } } };
+    if (!result?.data?.user?.exId)
+      throw new StarbucksError(
+        "Consumer sign-in is required. Use login or auth import --file <file>.",
+      );
+    await this.adopt(jar);
+  }
   async close(): Promise<void> {
     await this.http?.close?.();
     if (!this.dirty || this.options.transport) return;

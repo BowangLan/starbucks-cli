@@ -49,6 +49,7 @@ test("without a session, browsing works, account reads fail before fetch, and no
     assert.equal(await client.hasSession(), false);
     assert.deepEqual(await client.menu(), { menus: [] });
     await assert.rejects(client.user(), NotSignedInError);
+    await assert.rejects(client.refreshSession(), NotSignedInError);
     await assert.rejects(client.orderRisk(), /Not signed in/);
     await client.close();
     assert.deepEqual(calls, ["/apiproxy/v1/ordering/menu"]);

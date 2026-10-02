@@ -20,6 +20,7 @@ test("built CLI starts and exposes login and auth commands", () => {
   result = help("auth");
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /status/);
+  assert.match(result.stdout, /refresh/);
   assert.doesNotMatch(result.stdout, /login/);
 });
 
